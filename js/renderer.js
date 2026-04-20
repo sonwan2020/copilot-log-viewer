@@ -547,6 +547,12 @@ function createLinkedJsonView(obj, links) {
   pre.appendChild(fragment);
   container.appendChild(pre);
   container.appendChild(createCopyButton(jsonText));
+
+  // Scroll to bottom after render
+  requestAnimationFrame(() => {
+    pre.scrollTop = pre.scrollHeight;
+  });
+
   return container;
 }
 
