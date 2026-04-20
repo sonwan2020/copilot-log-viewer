@@ -792,6 +792,22 @@ html, body {
   text-decoration: underline;
 }
 
+/* Inline clickable links within JSON views */
+.json-inline-link {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.json-inline-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  background: var(--accent-light);
+}
+
 /* ===== Content Viewer Overlay ===== */
 .content-viewer-overlay {
   position: fixed;

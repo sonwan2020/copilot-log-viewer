@@ -393,73 +393,48 @@ export function renderRequestTab(entry, callbacks = {}) {
   anthropicTitle.textContent = 'Anthropic Request';
   anthropicCol.appendChild(anthropicTitle);
   if (entry.anthropicRequest) {
-    // Show a summary (without full message content to avoid huge renders)
     const summary = { ...entry.anthropicRequest };
-    summary.messages = (summary.messages || []).map((m, i) => ({
-      role: m.role,
-      content: `[${normalizeContent(m.content).length} block(s)]`,
-      _index: i,
-    }));
-    summary.system = (summary.system || []).map((s, i) => ({
-      type: s.type,
-      text: `[${(s.text || '').length} chars]`,
-      _index: i,
-    }));
-    summary.tools = `[${(summary.tools || []).length} tools]`;
-    anthropicCol.appendChild(createJsonView(summary));
+    const anthropicLinks = [];
 
-    // Add clickable links below the JSON view
-    const linksDiv = document.createElement('div');
-    linksDiv.className = 'request-links';
-
-    // Tools link
-    const toolCount = (entry.anthropicRequest.tools || []).length;
-    if (toolCount > 0) {
-      const toolLink = document.createElement('a');
-      toolLink.className = 'request-link';
-      toolLink.href = '#';
-      toolLink.textContent = `View ${toolCount} tools →`;
-      toolLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (callbacks.onSwitchTab) callbacks.onSwitchTab('tools');
-      });
-      linksDiv.appendChild(toolLink);
-    }
-
-    // System content links
-    const system = entry.anthropicRequest.system || [];
-    system.forEach((s, i) => {
-      const text = s.text || s.content || JSON.stringify(s);
-      const link = document.createElement('a');
-      link.className = 'request-link';
-      link.href = '#';
-      link.textContent = `View system prompt #${i + 1} (${text.length} chars) →`;
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (callbacks.onShowContent) callbacks.onShowContent(`System Prompt #${i + 1}`, text);
-      });
-      linksDiv.appendChild(link);
-    });
-
-    // Message content links
-    const messages = entry.anthropicRequest.messages || [];
-    messages.forEach((m, i) => {
+    summary.messages = (summary.messages || []).map((m, i) => {
       const blocks = normalizeContent(m.content);
       const fullText = blocks.map(b => b.text || JSON.stringify(b)).join('\n');
-      if (fullText.length > 200) {
-        const link = document.createElement('a');
-        link.className = 'request-link';
-        link.href = '#';
-        link.textContent = `View message #${i + 1} [${m.role}] (${fullText.length} chars) →`;
-        link.addEventListener('click', (e) => {
-          e.preventDefault();
+      const placeholder = `__LINK_MSG_${i}__`;
+      anthropicLinks.push({
+        placeholder,
+        label: `[${fullText.length} chars]`,
+        action: () => {
           if (callbacks.onShowContent) callbacks.onShowContent(`Message #${i + 1} (${m.role})`, fullText);
-        });
-        linksDiv.appendChild(link);
-      }
+        },
+      });
+      return { role: m.role, content: placeholder, _index: i };
     });
 
-    anthropicCol.appendChild(linksDiv);
+    summary.system = (summary.system || []).map((s, i) => {
+      const text = s.text || s.content || JSON.stringify(s);
+      const placeholder = `__LINK_SYS_${i}__`;
+      anthropicLinks.push({
+        placeholder,
+        label: `[${text.length} chars]`,
+        action: () => {
+          if (callbacks.onShowContent) callbacks.onShowContent(`System Prompt #${i + 1}`, text);
+        },
+      });
+      return { type: s.type, text: placeholder, _index: i };
+    });
+
+    const toolCount = (summary.tools || []).length;
+    const toolPlaceholder = `__LINK_TOOLS__`;
+    anthropicLinks.push({
+      placeholder: toolPlaceholder,
+      label: `[${toolCount} tools]`,
+      action: () => {
+        if (callbacks.onSwitchTab) callbacks.onSwitchTab('tools');
+      },
+    });
+    summary.tools = toolPlaceholder;
+
+    anthropicCol.appendChild(createLinkedJsonView(summary, anthropicLinks));
   }
 
   // OpenAI Request
@@ -470,56 +445,108 @@ export function renderRequestTab(entry, callbacks = {}) {
   openaiCol.appendChild(openaiTitle);
   if (entry.openaiRequest) {
     const summary = { ...entry.openaiRequest };
-    summary.messages = (summary.messages || []).map((m, i) => ({
-      role: m.role,
-      content: `[${(m.content || '').length} chars]`,
-      _index: i,
-    }));
-    summary.tools = `[${(summary.tools || []).length} tools]`;
-    openaiCol.appendChild(createJsonView(summary));
+    const openaiLinks = [];
 
-    // Add clickable links below the JSON view
-    const linksDiv = document.createElement('div');
-    linksDiv.className = 'request-links';
-
-    // Tools link
-    const toolCount = (entry.openaiRequest.tools || []).length;
-    if (toolCount > 0) {
-      const toolLink = document.createElement('a');
-      toolLink.className = 'request-link';
-      toolLink.href = '#';
-      toolLink.textContent = `View ${toolCount} tools →`;
-      toolLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (callbacks.onSwitchTab) callbacks.onSwitchTab('tools');
-      });
-      linksDiv.appendChild(toolLink);
-    }
-
-    // Message content links
-    const messages = entry.openaiRequest.messages || [];
-    messages.forEach((m, i) => {
+    summary.messages = (summary.messages || []).map((m, i) => {
       const content = m.content || '';
-      if (content.length > 200) {
-        const link = document.createElement('a');
-        link.className = 'request-link';
-        link.href = '#';
-        link.textContent = `View message #${i + 1} [${m.role}] (${content.length} chars) →`;
-        link.addEventListener('click', (e) => {
-          e.preventDefault();
+      const placeholder = `__LINK_MSG_${i}__`;
+      openaiLinks.push({
+        placeholder,
+        label: `[${content.length} chars]`,
+        action: () => {
           if (callbacks.onShowContent) callbacks.onShowContent(`Message #${i + 1} (${m.role})`, content);
-        });
-        linksDiv.appendChild(link);
-      }
+        },
+      });
+      return { role: m.role, content: placeholder, _index: i };
     });
 
-    openaiCol.appendChild(linksDiv);
+    const toolCount = (summary.tools || []).length;
+    const toolPlaceholder = `__LINK_TOOLS__`;
+    openaiLinks.push({
+      placeholder: toolPlaceholder,
+      label: `[${toolCount} tools]`,
+      action: () => {
+        if (callbacks.onSwitchTab) callbacks.onSwitchTab('tools');
+      },
+    });
+    summary.tools = toolPlaceholder;
+
+    openaiCol.appendChild(createLinkedJsonView(summary, openaiLinks));
   }
 
   grid.appendChild(anthropicCol);
   grid.appendChild(openaiCol);
   container.appendChild(grid);
 
+  return container;
+}
+
+/**
+ * Create a JSON view with clickable links embedded inline.
+ * @param {object} obj - The object to display as JSON
+ * @param {Array} links - Array of { placeholder, label, action }
+ */
+function createLinkedJsonView(obj, links) {
+  const container = document.createElement('div');
+  container.className = 'json-view-container';
+
+  const pre = document.createElement('div');
+  pre.className = 'json-view';
+
+  const jsonText = JSON.stringify(obj, null, 2);
+
+  // Split the JSON text by placeholders and build DOM with links
+  let remaining = jsonText;
+  const fragment = document.createDocumentFragment();
+
+  // Find all placeholder positions and sort by appearance order
+  const occurrences = [];
+  for (const link of links) {
+    // Placeholder appears quoted in JSON: "__LINK_..."
+    const quoted = `"${link.placeholder}"`;
+    let startIdx = remaining.indexOf(quoted);
+    if (startIdx === -1) {
+      // Try without quotes (shouldn't happen but fallback)
+      startIdx = remaining.indexOf(link.placeholder);
+      if (startIdx !== -1) {
+        occurrences.push({ idx: startIdx, len: link.placeholder.length, link });
+      }
+    } else {
+      occurrences.push({ idx: startIdx, len: quoted.length, link });
+    }
+  }
+  occurrences.sort((a, b) => a.idx - b.idx);
+
+  let cursor = 0;
+  for (const occ of occurrences) {
+    // Add text before this link
+    if (occ.idx > cursor) {
+      const textNode = document.createTextNode(remaining.slice(cursor, occ.idx));
+      fragment.appendChild(textNode);
+    }
+
+    // Add the clickable link
+    const a = document.createElement('a');
+    a.className = 'json-inline-link';
+    a.href = '#';
+    a.textContent = occ.link.label;
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      occ.link.action();
+    });
+    fragment.appendChild(a);
+
+    cursor = occ.idx + occ.len;
+  }
+
+  // Add remaining text
+  if (cursor < remaining.length) {
+    fragment.appendChild(document.createTextNode(remaining.slice(cursor)));
+  }
+
+  pre.appendChild(fragment);
+  container.appendChild(pre);
+  container.appendChild(createCopyButton(jsonText));
   return container;
 }
 
