@@ -1030,6 +1030,48 @@ h6.md-heading { font-size: 14px; color: var(--text-secondary); }
   margin: 16px 0;
 }
 
+/* ===== Markdown/Plain Text Toggle ===== */
+.md-toggle-wrapper {
+  position: relative;
+}
+
+.md-toggle-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-secondary);
+  z-index: 1;
+  transition: all 0.15s;
+}
+
+.md-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.plain-text-view {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin: 0;
+  overflow-x: auto;
+  color: var(--text-primary);
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .main-content {
