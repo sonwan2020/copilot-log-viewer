@@ -585,7 +585,37 @@ export function renderToolsTab(entry) {
     if (tool.description) {
       const desc = document.createElement('div');
       desc.style.marginBottom = '8px';
-      desc.appendChild(renderTextContent(tool.description));
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'md-toggle-wrapper';
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'md-toggle-btn';
+      toggleBtn.textContent = 'Plain Text';
+      toggleBtn.title = 'Toggle between formatted and plain text';
+
+      const mdView = renderMarkdownContent(tool.description);
+      const plainView = document.createElement('pre');
+      plainView.className = 'plain-text-view hidden';
+      plainView.textContent = tool.description;
+
+      toggleBtn.addEventListener('click', () => {
+        const showingPlain = !plainView.classList.contains('hidden');
+        if (showingPlain) {
+          plainView.classList.add('hidden');
+          mdView.classList.remove('hidden');
+          toggleBtn.textContent = 'Plain Text';
+        } else {
+          mdView.classList.add('hidden');
+          plainView.classList.remove('hidden');
+          toggleBtn.textContent = 'Formatted';
+        }
+      });
+
+      wrapper.appendChild(toggleBtn);
+      wrapper.appendChild(mdView);
+      wrapper.appendChild(plainView);
+      desc.appendChild(wrapper);
       content.appendChild(desc);
     }
 
