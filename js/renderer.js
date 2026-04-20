@@ -884,8 +884,8 @@ export function renderResponseTab(entry) {
     usageTitle.style.fontSize = '14px';
     container.appendChild(usageTitle);
 
-    const statsGrid = document.createElement('div');
-    statsGrid.className = 'usage-stats';
+    const table = document.createElement('table');
+    table.className = 'usage-table';
 
     const usageItems = [
       { label: 'Prompt Tokens', value: parsed.usage.prompt_tokens },
@@ -902,12 +902,11 @@ export function renderResponseTab(entry) {
 
     for (const { label, value } of usageItems) {
       if (value == null) continue;
-      const stat = document.createElement('div');
-      stat.className = 'usage-stat';
-      stat.innerHTML = `<div class="label">${escapeHtml(label)}</div><div class="value">${Number(value).toLocaleString()}</div>`;
-      statsGrid.appendChild(stat);
+      const row = document.createElement('tr');
+      row.innerHTML = `<td class="usage-table-label">${escapeHtml(label)}</td><td class="usage-table-value">${Number(value).toLocaleString()}</td>`;
+      table.appendChild(row);
     }
-    container.appendChild(statsGrid);
+    container.appendChild(table);
   }
 
   // Response model
