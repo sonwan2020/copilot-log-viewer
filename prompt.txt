@@ -1,0 +1,46 @@
+Here the logs have changed, please make the changes accordingly
+- file extension default to jsonl
+- no [ at the beginning of the file
+- there is a valid json object in each line
+
+On the request page, the content or text shows [59 tools], [8804 chars], [27510 chars] etc
+- For tools, add link to the tools tab
+- For the text or content, we should use separated page to display the content, and add link in the request page
+
+display the content with colored format. parse the content to get the format, default to markdown format.
+
+increase the font size
+
+in the request page, format the links to the json? when I click the link "[80 chars]", and the content shows
+
+increase the request body window, default to the bottom of the request window
+
+use markdown parser to display messages.user
+
+when read Messages.User, Request content, add a button to show the origin plain text format
+
+when the content of tab Messages / System / Tools are very large, add scroll bar at the right of the window, so I can read the full content
+
+parse the system prompts with markdown, also add plain text button
+
+user markdown to render the description of each tool
+
+user markdown to render the description of each tool, add plain text toggle
+
+in response tab, use a table for usage statistics
+
+in response tab, use a table for usage statistics
+- put the table on the left part, adjust the table width according to the length of the string
+- add outer border
+
+add gray outer border to table usage statistics in tab response
+
+in the entries list, there is a search box. search the content from messages, system, tools, requests
+- display the filtered items containing the search pattern
+- on click the items in the left list, showing the text containing the pattern, if it is in messages, show the messages, if it is in system page, show system tab, next tools, response
+
+when the search match in tools, when click the item in the left list, display tools tab, also expand the target tool matching the pattern, goto that tool so I can find it easily
+
+add plain text button to response body
+
+save all my input prompt to file prompt.txt
