@@ -457,8 +457,9 @@ export function renderMessagesTab(entry) {
         toggleBtn.title = 'Toggle between formatted and plain text';
 
         const mdView = renderMarkdownContent(rawText);
+        mdView.classList.add('hidden');
         const plainView = document.createElement('pre');
-        plainView.className = 'plain-text-view hidden';
+        plainView.className = 'plain-text-view';
         plainView.textContent = rawText;
 
         toggleBtn.addEventListener('click', () => {
@@ -530,8 +531,9 @@ export function renderSystemTab(entry) {
     toggleBtn.title = 'Toggle between formatted and plain text';
 
     const mdView = renderMarkdownContent(text);
+    mdView.classList.add('hidden');
     const plainView = document.createElement('pre');
-    plainView.className = 'plain-text-view hidden';
+    plainView.className = 'plain-text-view';
     plainView.textContent = text;
 
     toggleBtn.addEventListener('click', () => {
@@ -602,12 +604,13 @@ export function renderToolsTab(entry, searchTerm = '') {
 
       const toggleBtn = document.createElement('button');
       toggleBtn.className = 'md-toggle-btn';
-      toggleBtn.textContent = 'Plain Text';
+      toggleBtn.textContent = 'Formatted';
       toggleBtn.title = 'Toggle between formatted and plain text';
 
       const mdView = renderMarkdownContent(tool.description);
+      mdView.classList.add('hidden');
       const plainView = document.createElement('pre');
-      plainView.className = 'plain-text-view hidden';
+      plainView.className = 'plain-text-view';
       plainView.textContent = tool.description;
 
       toggleBtn.addEventListener('click', () => {
@@ -633,6 +636,7 @@ export function renderToolsTab(entry, searchTerm = '') {
     if (tool.input_schema) {
       const schemaDetails = document.createElement('details');
       schemaDetails.className = 'collapsible';
+      schemaDetails.open = true;
       const schemaSummary = document.createElement('summary');
       schemaSummary.textContent = 'Input Schema';
       schemaDetails.appendChild(schemaSummary);
@@ -865,8 +869,9 @@ export function renderResponseTab(entry) {
     toggleBtn.title = 'Toggle between formatted and plain text';
 
     const mdView = renderMarkdownContent(parsed.content);
+    mdView.classList.add('hidden');
     const plainView = document.createElement('pre');
-    plainView.className = 'plain-text-view hidden';
+    plainView.className = 'plain-text-view';
     plainView.textContent = parsed.content;
 
     toggleBtn.addEventListener('click', () => {
