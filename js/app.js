@@ -346,12 +346,13 @@ function showContentViewer(title, text) {
 
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'md-toggle-btn';
-  toggleBtn.textContent = 'Plain Text';
+  toggleBtn.textContent = 'Formatted';
   toggleBtn.title = 'Toggle between formatted and plain text';
 
   const mdView = renderMarkdownContent(text);
+  mdView.classList.add('hidden');
   const plainView = document.createElement('pre');
-  plainView.className = 'plain-text-view hidden';
+  plainView.className = 'plain-text-view';
   plainView.textContent = text;
 
   toggleBtn.addEventListener('click', () => {
