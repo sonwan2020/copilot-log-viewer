@@ -368,10 +368,9 @@ function selectEntry(index) {
   } else {
     state.searchMatches = [];
     state.searchMatchIndex = -1;
-    setActiveTab('messages');
+    // Preserve current tab when switching entries; default to 'messages' on first selection
+    setActiveTab(state.activeTab || 'messages');
     updateSearchNav();
-    // Scroll to bottom of tab content
-    tabContent.scrollTop = tabContent.scrollHeight;
   }
 
   // Update active entry in sidebar
@@ -388,6 +387,14 @@ function renderActiveTab() {
   switch (state.activeTab) {
     case 'messages':
       tabContent.appendChild(renderMessagesTab(entry));
+      // Scroll to the last user message
+      {
+        const userMsgs = tabContent.querySelectorAll('.message.user');
+        const lastUser = userMsgs[userMsgs.length - 1];
+        if (lastUser) {
+          requestAnimationFrame(() => lastUser.scrollIntoView({ block: 'start' }));
+        }
+      }
       break;
     case 'system':
       tabContent.appendChild(renderSystemTab(entry));

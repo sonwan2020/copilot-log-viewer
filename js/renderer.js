@@ -758,11 +758,16 @@ export function renderMessagesTab(entry) {
     container.appendChild(msgDiv);
   }
 
-  // Expand the last message by default (triggers lazy render)
-  const lastMsg = container.lastElementChild;
-  if (lastMsg) {
-    const lastHeader = lastMsg.querySelector('.message-header');
-    if (lastHeader) lastHeader.click();
+  // Expand the last user message by default and scroll to it
+  const allMessages = container.querySelectorAll('.message');
+  let lastUserMsg = null;
+  for (const m of allMessages) {
+    if (m.classList.contains('user')) lastUserMsg = m;
+  }
+  const expandTarget = lastUserMsg || container.lastElementChild;
+  if (expandTarget) {
+    const targetHeader = expandTarget.querySelector('.message-header');
+    if (targetHeader) targetHeader.click();
   }
 
   return container;
