@@ -290,9 +290,71 @@ function formatInlineMarkdown(text) {
 }
 
 /**
+ * File extension → code language mapping for syntax highlighting.
+ */
+const EXT_LANG_MAP = {
+  '.json': 'json',
+  '.js': 'javascript',
+  '.mjs': 'javascript',
+  '.cjs': 'javascript',
+  '.ts': 'typescript',
+  '.tsx': 'typescript',
+  '.jsx': 'javascript',
+  '.html': 'html',
+  '.htm': 'html',
+  '.css': 'css',
+  '.scss': 'css',
+  '.less': 'css',
+  '.xml': 'xml',
+  '.svg': 'xml',
+  '.yaml': 'yaml',
+  '.yml': 'yaml',
+  '.py': 'python',
+  '.java': 'java',
+  '.cs': 'csharp',
+  '.c': 'c',
+  '.cpp': 'cpp',
+  '.h': 'c',
+  '.hpp': 'cpp',
+  '.go': 'go',
+  '.rs': 'rust',
+  '.rb': 'ruby',
+  '.php': 'php',
+  '.sh': 'bash',
+  '.bash': 'bash',
+  '.zsh': 'bash',
+  '.ps1': 'powershell',
+  '.sql': 'sql',
+  '.kt': 'kotlin',
+  '.swift': 'swift',
+  '.r': 'r',
+  '.lua': 'lua',
+  '.md': null, // markdown renders via renderMarkdownContent
+  '.txt': null,
+};
+
+/**
+ * Detect code language from a Read-type tool's input file path.
+ * Returns language string or null (for markdown fallback).
+ */
+function detectLangFromToolInput(toolName, input) {
+  if (!toolName || !input) return null;
+  // Only detect for Read-type tools
+  const name = toolName.toLowerCase();
+  if (name !== 'read' && name !== 'readfile' && name !== 'read_file') return null;
+  // Extract file path from input
+  const filePath = typeof input === 'string' ? input : (input.file_path || input.path || input.filePath || '');
+  if (!filePath) return null;
+  const dotIdx = filePath.lastIndexOf('.');
+  if (dotIdx < 0) return null;
+  const ext = filePath.slice(dotIdx).toLowerCase();
+  return EXT_LANG_MAP.hasOwnProperty(ext) ? EXT_LANG_MAP[ext] : null;
+}
+
+/**
  * Render a single content block.
  */
-function renderContentBlock(block) {
+function renderContentBlock(block, toolUseMap) {
   if (block.type === 'text') {
     return renderTextContent(block.text || '');
   }
@@ -303,12 +365,13 @@ function renderContentBlock(block) {
 
     const header = document.createElement('div');
     header.className = 'tool-use-header';
-    header.textContent = `Tool Call: ${block.name || 'unknown'}`;
+    header.textContent = `Tool Call: ${block.name || 'unknown'}${block.id ? ` (${block.id})` : ''}`;
     div.appendChild(header);
 
     if (block.input) {
       const details = document.createElement('details');
       details.className = 'collapsible';
+      details.open = true;
       const summary = document.createElement('summary');
       summary.textContent = 'Input';
       const badge = document.createElement('span');
@@ -333,16 +396,157 @@ function renderContentBlock(block) {
     const div = document.createElement('div');
     div.className = 'tool-result-block';
 
+    // Look up linked tool_use info
+    const toolInfo = (toolUseMap && block.tool_use_id) ? toolUseMap.get(block.tool_use_id) : null;
+    const toolName = toolInfo?.name || 'unknown';
+
+    // Header with tool name and id (always visible)
     const header = document.createElement('div');
     header.className = 'tool-result-header';
-    header.textContent = `Tool Result${block.tool_use_id ? ` (${block.tool_use_id.substring(0, 8)}...)` : ''}`;
+    header.textContent = `Tool Result: ${toolName}${block.tool_use_id ? ` (${block.tool_use_id})` : ''}`;
     div.appendChild(header);
 
+    // Show linked tool input (always visible, outside collapsible)
+    if (toolInfo?.input) {
+      const inputSection = document.createElement('div');
+      inputSection.className = 'tool-result-linked-input';
+      const inputLabel = document.createElement('div');
+      inputLabel.className = 'tool-result-input-label';
+      inputLabel.textContent = 'Input';
+      inputSection.appendChild(inputLabel);
+      inputSection.appendChild(createJsonView(toolInfo.input));
+      div.appendChild(inputSection);
+    }
+
+    // Collapsible content section (hidden by default)
     if (block.content) {
+      const contentHeader = document.createElement('div');
+      contentHeader.className = 'tool-result-content-header';
+      contentHeader.style.cursor = 'pointer';
+
+      const toggleIcon = document.createElement('span');
+      toggleIcon.className = 'tool-result-toggle-icon';
+      toggleIcon.textContent = '\u25B6';
+      contentHeader.appendChild(toggleIcon);
+
+      const contentLabel = document.createElement('span');
+      contentLabel.textContent = 'Content';
+      contentHeader.appendChild(contentLabel);
+      div.appendChild(contentHeader);
+
+      const body = document.createElement('div');
+      body.className = 'tool-result-body hidden';
+
+      contentHeader.addEventListener('click', () => {
+        const isHidden = body.classList.contains('hidden');
+        body.classList.toggle('hidden');
+        toggleIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
+      });
+
       const contentBlocks = normalizeContent(block.content);
       for (const cb of contentBlocks) {
-        div.appendChild(renderContentBlock(cb));
+        if (cb.type === 'text') {
+          const rawText = cb.text || '';
+          const trimmedText = rawText.trim();
+
+          // Try to detect if content is JSON
+          if ((trimmedText.startsWith('{') || trimmedText.startsWith('[')) && trimmedText.length > 1) {
+            try {
+              const parsed = JSON.parse(trimmedText);
+              body.appendChild(createJsonView(parsed));
+              continue;
+            } catch {
+              // Not valid JSON, fall through
+            }
+          }
+
+          // Detect file extension from linked Read tool input for syntax highlighting
+          const lang = detectLangFromToolInput(toolName, toolInfo?.input);
+          if (lang) {
+            // Render as syntax-highlighted code block
+            const wrapper = document.createElement('div');
+            wrapper.className = 'md-toggle-wrapper';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'md-toggle-btn';
+            toggleBtn.textContent = 'Plain Text';
+            toggleBtn.title = 'Toggle between formatted and plain text';
+
+            const codeWrapper = document.createElement('div');
+            codeWrapper.className = 'md-code-wrapper';
+            const langLabel = document.createElement('span');
+            langLabel.className = 'md-code-lang';
+            langLabel.textContent = lang;
+            codeWrapper.appendChild(langLabel);
+            const pre = document.createElement('pre');
+            pre.className = 'md-code-block';
+            const codeEl = document.createElement('code');
+            codeEl.className = `md-code lang-${lang}`;
+            codeEl.textContent = rawText;
+            pre.appendChild(codeEl);
+            codeWrapper.appendChild(pre);
+
+            const plainView = document.createElement('pre');
+            plainView.className = 'plain-text-view hidden';
+            plainView.textContent = rawText;
+
+            toggleBtn.addEventListener('click', () => {
+              const showingCode = !codeWrapper.classList.contains('hidden');
+              if (showingCode) {
+                codeWrapper.classList.add('hidden');
+                plainView.classList.remove('hidden');
+                toggleBtn.textContent = 'Formatted';
+              } else {
+                plainView.classList.add('hidden');
+                codeWrapper.classList.remove('hidden');
+                toggleBtn.textContent = 'Plain Text';
+              }
+            });
+
+            wrapper.appendChild(toggleBtn);
+            wrapper.appendChild(codeWrapper);
+            wrapper.appendChild(plainView);
+            body.appendChild(wrapper);
+          } else {
+            // Default: render as markdown with plain text toggle
+            const wrapper = document.createElement('div');
+            wrapper.className = 'md-toggle-wrapper';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'md-toggle-btn';
+            toggleBtn.textContent = 'Plain Text';
+            toggleBtn.title = 'Toggle between formatted and plain text';
+
+            const mdView = renderMarkdownContent(rawText);
+            mdView.classList.add('hidden');
+            const plainView = document.createElement('pre');
+            plainView.className = 'plain-text-view';
+            plainView.textContent = rawText;
+
+            toggleBtn.addEventListener('click', () => {
+              const showingPlain = !plainView.classList.contains('hidden');
+              if (showingPlain) {
+                plainView.classList.add('hidden');
+                mdView.classList.remove('hidden');
+                toggleBtn.textContent = 'Plain Text';
+              } else {
+                mdView.classList.add('hidden');
+                plainView.classList.remove('hidden');
+                toggleBtn.textContent = 'Formatted';
+              }
+            });
+
+            wrapper.appendChild(toggleBtn);
+            wrapper.appendChild(mdView);
+            wrapper.appendChild(plainView);
+            body.appendChild(wrapper);
+          }
+        } else {
+          body.appendChild(renderContentBlock(cb, toolUseMap));
+        }
       }
+
+      div.appendChild(body);
     }
 
     return div;
@@ -432,6 +636,17 @@ export function renderMessagesTab(entry) {
     return container;
   }
 
+  // Build a map of tool_use id → { name, input } for tool_result lookups
+  const toolUseMap = new Map();
+  for (const msg of messages) {
+    const blocks = normalizeContent(msg.content);
+    for (const block of blocks) {
+      if (block.type === 'tool_use' && block.id) {
+        toolUseMap.set(block.id, { name: block.name || 'unknown', input: block.input || null });
+      }
+    }
+  }
+
   for (const msg of messages) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${msg.role}`;
@@ -455,7 +670,8 @@ export function renderMessagesTab(entry) {
         previewText = `Tool: ${block.name || 'unknown'}`;
         break;
       } else if (block.type === 'tool_result') {
-        previewText = `Tool Result`;
+        const toolInfo = block.tool_use_id ? toolUseMap.get(block.tool_use_id) : null;
+        previewText = `Tool Result: ${toolInfo?.name || 'unknown'}`;
         break;
       }
     }
@@ -515,13 +731,24 @@ export function renderMessagesTab(entry) {
         wrapper.appendChild(plainView);
         body.appendChild(wrapper);
       } else {
-        body.appendChild(renderContentBlock(block));
+        body.appendChild(renderContentBlock(block, toolUseMap));
       }
     }
 
     msgDiv.appendChild(header);
     msgDiv.appendChild(body);
     container.appendChild(msgDiv);
+  }
+
+  // Expand the last message by default
+  const lastMsg = container.lastElementChild;
+  if (lastMsg) {
+    const lastBody = lastMsg.querySelector('.message-body');
+    const lastPreview = lastMsg.querySelector('.message-preview');
+    const lastIcon = lastMsg.querySelector('.message-toggle-icon');
+    if (lastBody) lastBody.classList.remove('hidden');
+    if (lastPreview) lastPreview.classList.add('hidden');
+    if (lastIcon) lastIcon.textContent = '\u25BC';
   }
 
   return container;
@@ -1285,5 +1512,50 @@ export function renderResponseTab(entry) {
     container.appendChild(sseSection);
   }
 
+  return container;
+}
+
+/**
+ * Render the Raw JSON tab — shows the full entry as pretty-printed JSON with copy button.
+ */
+export function renderRawTab(entry) {
+  const container = document.createElement('div');
+
+  // Strip internal _index property for display
+  const displayEntry = { ...entry };
+  delete displayEntry._index;
+
+  const jsonText = JSON.stringify(displayEntry, null, 2);
+
+  const jsonContainer = document.createElement('div');
+  jsonContainer.className = 'json-view-container';
+
+  const pre = document.createElement('div');
+  pre.className = 'json-view';
+  pre.textContent = jsonText;
+
+  jsonContainer.appendChild(pre);
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'copy-btn';
+  copyBtn.textContent = 'Copy';
+  copyBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(jsonText);
+      copyBtn.textContent = 'Copied!';
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy';
+        copyBtn.classList.remove('copied');
+      }, 1500);
+    } catch {
+      copyBtn.textContent = 'Failed';
+      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+    }
+  });
+  jsonContainer.appendChild(copyBtn);
+
+  container.appendChild(jsonContainer);
   return container;
 }

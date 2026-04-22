@@ -599,7 +599,79 @@ html, body {
   font-weight: 600;
   color: #7c3aed;
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
 }
+
+.tool-result-toggle-icon {
+  font-size: 10px;
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tool-result-body.hidden {
+  display: none;
+}
+
+.tool-result-content-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.tool-result-linked-input {
+  margin: 6px 0 10px;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.tool-result-input-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Additional language colors for syntax highlighting */
+.md-code.lang-java { color: #b91c1c; }
+.md-code.lang-csharp { color: #6d28d9; }
+.md-code.lang-c { color: #0369a1; }
+.md-code.lang-cpp { color: #0284c7; }
+.md-code.lang-go { color: #0891b2; }
+.md-code.lang-rust { color: #c2410c; }
+.md-code.lang-ruby { color: #be123c; }
+.md-code.lang-php { color: #6d28d9; }
+.md-code.lang-kotlin { color: #7c3aed; }
+.md-code.lang-swift { color: #ea580c; }
+.md-code.lang-r { color: #2563eb; }
+.md-code.lang-lua { color: #1d4ed8; }
+.md-code.lang-powershell { color: #1e40af; }
+
+[data-theme="dark"] .md-code.lang-java { color: #fca5a5; }
+[data-theme="dark"] .md-code.lang-csharp { color: #c4b5fd; }
+[data-theme="dark"] .md-code.lang-c { color: #7dd3fc; }
+[data-theme="dark"] .md-code.lang-cpp { color: #7dd3fc; }
+[data-theme="dark"] .md-code.lang-go { color: #67e8f9; }
+[data-theme="dark"] .md-code.lang-rust { color: #fdba74; }
+[data-theme="dark"] .md-code.lang-ruby { color: #fda4af; }
+[data-theme="dark"] .md-code.lang-php { color: #c4b5fd; }
+[data-theme="dark"] .md-code.lang-kotlin { color: #c4b5fd; }
+[data-theme="dark"] .md-code.lang-swift { color: #fdba74; }
+[data-theme="dark"] .md-code.lang-r { color: #93c5fd; }
+[data-theme="dark"] .md-code.lang-lua { color: #93c5fd; }
+[data-theme="dark"] .md-code.lang-powershell { color: #93c5fd; }
 
 /* ===== Code Blocks ===== */
 .code-block {

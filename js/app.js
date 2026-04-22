@@ -10,6 +10,7 @@ import {
   renderToolsTab,
   renderRequestTab,
   renderResponseTab,
+  renderRawTab,
   renderMarkdownContent,
   modelLabel,
 } from './renderer.js';
@@ -282,7 +283,7 @@ function selectEntry(index) {
   } else {
     state.searchMatches = [];
     state.searchMatchIndex = -1;
-    renderActiveTab();
+    setActiveTab('messages');
     updateSearchNav();
   }
 
@@ -315,6 +316,9 @@ function renderActiveTab() {
       break;
     case 'response':
       tabContent.appendChild(renderResponseTab(entry));
+      break;
+    case 'raw':
+      tabContent.appendChild(renderRawTab(entry));
       break;
   }
 }
