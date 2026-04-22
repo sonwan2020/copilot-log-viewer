@@ -124,6 +124,8 @@ html, body {
   cursor: pointer;
   transition: all 0.2s ease;
   background: var(--bg-secondary);
+  width: 50%;
+  margin: 0;
 }
 
 .drop-zone:hover,
