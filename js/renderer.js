@@ -1152,7 +1152,11 @@ function createLinkedJsonView(obj, links) {
  */
 export function renderResponseTab(entry) {
   const container = document.createElement('div');
-  const parsed = parseSSEResponse(entry.copilotResponse);
+  // Cache parsed SSE result to avoid re-parsing on every tab switch
+  if (!entry._parsedResponse) {
+    entry._parsedResponse = parseSSEResponse(entry.copilotResponse);
+  }
+  const parsed = entry._parsedResponse;
 
   // Assembled content (collapsible, expanded by default)
   const contentSection = document.createElement('div');
@@ -1599,11 +1603,15 @@ function renderSseBody(sseBody, parsed, entry, sseToggleBtn) {
 export function renderRawTab(entry) {
   const container = document.createElement('div');
 
-  // Strip internal _index property for display
-  const displayEntry = { ...entry };
-  delete displayEntry._index;
-
-  const jsonText = JSON.stringify(displayEntry, null, 2);
+  // Cache stringified JSON to avoid multi-MB re-serialization on every tab switch
+  if (!entry._rawJson) {
+    const displayEntry = { ...entry };
+    delete displayEntry._index;
+    delete displayEntry._parsedResponse;
+    delete displayEntry._rawJson;
+    entry._rawJson = JSON.stringify(displayEntry, null, 2);
+  }
+  const jsonText = entry._rawJson;
 
   const jsonContainer = document.createElement('div');
   jsonContainer.className = 'json-view-container';

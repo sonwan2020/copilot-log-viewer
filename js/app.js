@@ -441,7 +441,10 @@ function showContentViewer(title, text) {
   const closeBtn = document.createElement('button');
   closeBtn.className = 'content-viewer-close';
   closeBtn.textContent = '\u00d7';
-  closeBtn.addEventListener('click', () => overlay.remove());
+  closeBtn.addEventListener('click', () => {
+    overlay.remove();
+    document.removeEventListener('keydown', escHandler);
+  });
   header.appendChild(closeBtn);
 
   const body = document.createElement('div');
@@ -456,7 +459,10 @@ function showContentViewer(title, text) {
 
   // Close on overlay click (outside viewer)
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
+    if (e.target === overlay) {
+      overlay.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
   });
 
   // Close on Escape key
