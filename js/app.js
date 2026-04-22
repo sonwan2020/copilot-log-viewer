@@ -24,6 +24,8 @@ let state = {
   fileSize: 0,
   truncated: false,
   searchMatchTab: {},
+  searchMatches: [],
+  searchMatchIndex: -1,
 };
 
 // ===== DOM References =====
@@ -51,6 +53,10 @@ const tabs = $('tabs');
 const themeToggle = $('themeToggle');
 const systemCount = $('systemCount');
 const toolsCount = $('toolsCount');
+const searchNav = $('searchNav');
+const searchPrev = $('searchPrev');
+const searchNext = $('searchNext');
+const searchMatchCountEl = $('searchMatchCount');
 
 // ===== Theme =====
 function initTheme() {
@@ -146,6 +152,9 @@ function closeFile() {
     fileName: '',
     fileSize: 0,
     truncated: false,
+    searchMatchTab: {},
+    searchMatches: [],
+    searchMatchIndex: -1,
   };
 
   fileInfo.classList.add('hidden');
@@ -157,6 +166,7 @@ function closeFile() {
   tabContent.innerHTML = '';
   searchInput.value = '';
   modelFilter.innerHTML = '<option value="">All models</option>';
+  updateSearchNav();
 }
 
 // ===== Filtering =====
@@ -262,18 +272,18 @@ function selectEntry(index) {
   systemCount.textContent = `(${entry.anthropicRequest?.system?.length || 0})`;
   toolsCount.textContent = `(${entry.anthropicRequest?.tools?.length || 0})`;
 
-  // Auto-switch to the tab where search matched
+  // Collect search matches and navigate to first one
   const searchVal = searchInput.value.trim();
   if (searchVal && state.searchMatchTab && state.searchMatchTab[index]) {
+    state.searchMatches = collectAllMatches(entry, searchVal);
+    state.searchMatchIndex = -1;
     setActiveTab(state.searchMatchTab[index]);
+    navigateToMatch(0);
   } else {
+    state.searchMatches = [];
+    state.searchMatchIndex = -1;
     renderActiveTab();
-  }
-
-  // Scroll to first search match in the rendered tab content
-  const activeSearchVal = searchInput.value.trim();
-  if (activeSearchVal) {
-    scrollToFirstMatch(tabContent, activeSearchVal);
+    updateSearchNav();
   }
 
   // Update active entry in sidebar
@@ -400,8 +410,90 @@ function showContentViewer(title, text) {
   document.body.appendChild(overlay);
 }
 
-// ===== Search Scroll-to-Match =====
-function scrollToFirstMatch(container, searchTerm) {
+// ===== Search Match Navigation =====
+
+/**
+ * Collect all search matches in an entry across tabs (Messages → System → Tools).
+ * Each match: { tab, occurrenceInTab } — we track which tab and the Nth occurrence within that tab.
+ */
+function collectAllMatches(entry, searchTerm) {
+  const matches = [];
+  const lowerTerm = searchTerm.toLowerCase();
+
+  // Helper: count all occurrences in a string
+  function countOccurrences(text) {
+    const lower = text.toLowerCase();
+    let count = 0;
+    let pos = 0;
+    while ((pos = lower.indexOf(lowerTerm, pos)) !== -1) {
+      count++;
+      pos += lowerTerm.length;
+    }
+    return count;
+  }
+
+  // Messages tab
+  const messages = entry.anthropicRequest?.messages || [];
+  let msgTotal = 0;
+  for (const msg of messages) {
+    const blocks = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) }];
+    for (const block of blocks) {
+      const text = block.text || (block.type === 'text' ? '' : JSON.stringify(block));
+      msgTotal += countOccurrences(text);
+    }
+  }
+  for (let i = 0; i < msgTotal; i++) {
+    matches.push({ tab: 'messages', occurrenceInTab: i });
+  }
+
+  // System tab
+  const system = entry.anthropicRequest?.system || [];
+  let sysTotal = 0;
+  for (const s of system) {
+    const text = s.text || s.content || JSON.stringify(s);
+    sysTotal += countOccurrences(text);
+  }
+  for (let i = 0; i < sysTotal; i++) {
+    matches.push({ tab: 'system', occurrenceInTab: i });
+  }
+
+  // Tools tab
+  const tools = entry.anthropicRequest?.tools || [];
+  let toolTotal = 0;
+  for (const t of tools) {
+    toolTotal += countOccurrences(t.name || '');
+    toolTotal += countOccurrences(t.description || '');
+  }
+  for (let i = 0; i < toolTotal; i++) {
+    matches.push({ tab: 'tools', occurrenceInTab: i });
+  }
+
+  return matches;
+}
+
+/**
+ * Navigate to a specific match by index. Switches tab if needed, highlights, and scrolls.
+ */
+function navigateToMatch(index) {
+  if (index < 0 || index >= state.searchMatches.length) return;
+
+  const match = state.searchMatches[index];
+  state.searchMatchIndex = index;
+
+  // Switch tab if needed (setActiveTab re-renders content)
+  if (state.activeTab !== match.tab) {
+    setActiveTab(match.tab);
+  }
+
+  // Highlight the Nth occurrence within the current tab's rendered content
+  highlightNthMatch(tabContent, searchInput.value.trim(), match.occurrenceInTab);
+  updateSearchNav();
+}
+
+/**
+ * Walk visible text nodes in container, find the Nth occurrence of searchTerm, highlight and scroll.
+ */
+function highlightNthMatch(container, searchTerm, n) {
   if (!searchTerm) return;
 
   // Clean up previous highlights
@@ -416,7 +508,6 @@ function scrollToFirstMatch(container, searchTerm) {
   // Walk all text nodes, skipping hidden elements
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      // Skip text inside hidden elements (markdown/plain-text toggle)
       let el = node.parentElement;
       while (el && el !== container) {
         if (el.classList.contains('hidden')) return NodeFilter.FILTER_REJECT;
@@ -426,22 +517,28 @@ function scrollToFirstMatch(container, searchTerm) {
     },
   });
 
+  let found = 0;
   let matchNode = null;
   let matchOffset = -1;
 
   while (walker.nextNode()) {
     const text = walker.currentNode.textContent.toLowerCase();
-    const idx = text.indexOf(lowerTerm);
-    if (idx !== -1) {
-      matchNode = walker.currentNode;
-      matchOffset = idx;
-      break;
+    let pos = 0;
+    while ((pos = text.indexOf(lowerTerm, pos)) !== -1) {
+      if (found === n) {
+        matchNode = walker.currentNode;
+        matchOffset = pos;
+        break;
+      }
+      found++;
+      pos += lowerTerm.length;
     }
+    if (matchNode) break;
   }
 
   if (!matchNode) return;
 
-  // Open any closed <details> ancestors so the match is visible
+  // Open any closed <details> ancestors
   let el = matchNode.parentElement;
   while (el && el !== container) {
     if (el.tagName === 'DETAILS' && !el.open) {
@@ -450,7 +547,7 @@ function scrollToFirstMatch(container, searchTerm) {
     el = el.parentElement;
   }
 
-  // Wrap the match in a <mark> using Range API
+  // Wrap the match in a <mark>
   const range = document.createRange();
   range.setStart(matchNode, matchOffset);
   range.setEnd(matchNode, matchOffset + searchTerm.length);
@@ -459,10 +556,30 @@ function scrollToFirstMatch(container, searchTerm) {
   mark.className = 'search-highlight';
   range.surroundContents(mark);
 
-  // Scroll to the highlight
   requestAnimationFrame(() => {
     mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
+}
+
+/**
+ * Update Prev/Next button states and match counter.
+ */
+function updateSearchNav() {
+  const hasSearch = searchInput.value.trim().length > 0;
+  const total = state.searchMatches.length;
+  const idx = state.searchMatchIndex;
+
+  if (hasSearch && total > 0) {
+    searchNav.classList.remove('hidden');
+    searchMatchCountEl.textContent = `${idx + 1} / ${total}`;
+    searchPrev.disabled = idx <= 0;
+    searchNext.disabled = idx >= total - 1;
+  } else {
+    searchNav.classList.toggle('hidden', !hasSearch);
+    searchMatchCountEl.textContent = hasSearch ? '0 / 0' : '';
+    searchPrev.disabled = true;
+    searchNext.disabled = true;
+  }
 }
 
 // ===== Drag & Drop =====
@@ -526,7 +643,25 @@ function initEventListeners() {
   let searchTimeout;
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(applyFilters, 300);
+    searchTimeout = setTimeout(() => {
+      applyFilters();
+      // Reset match nav when search changes
+      state.searchMatches = [];
+      state.searchMatchIndex = -1;
+      updateSearchNav();
+    }, 300);
+  });
+
+  // Search navigation buttons
+  searchPrev.addEventListener('click', () => {
+    if (state.searchMatchIndex > 0) {
+      navigateToMatch(state.searchMatchIndex - 1);
+    }
+  });
+  searchNext.addEventListener('click', () => {
+    if (state.searchMatchIndex < state.searchMatches.length - 1) {
+      navigateToMatch(state.searchMatchIndex + 1);
+    }
   });
 
   // Keyboard navigation (works with filtered list)
