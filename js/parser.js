@@ -24,7 +24,9 @@ export function parseLogFile(text) {
     const l = line.trim();
     if (!l) continue;
     try {
-      entries.push(JSON.parse(l));
+      const entry = JSON.parse(l);
+      entry._index = entries.length;
+      entries.push(entry);
     } catch {
       parseErrors++;
     }

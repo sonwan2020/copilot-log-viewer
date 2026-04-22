@@ -378,7 +378,7 @@ export function renderEntryList(entries, container, onSelect) {
 
     item.innerHTML = `
       <div class="entry-item-header">
-        <span class="entry-item-index">#${i + 1}</span>
+        <span class="entry-item-index">#${entry._index}</span>
         <span class="entry-item-time">${escapeHtml(timeStr)}</span>
       </div>
       <div class="entry-item-model">
