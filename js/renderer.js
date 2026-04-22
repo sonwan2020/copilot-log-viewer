@@ -663,8 +663,11 @@ export function renderMessagesTab(entry) {
     const blocks = normalizeContent(msg.content);
     let previewText = '';
     for (const block of blocks) {
-      if (block.type === 'text') {
-        previewText = (block.text || '').substring(0, 80).replace(/\n/g, ' ');
+      if (block.type === 'text' && block.text && block.text.trim()) {
+        previewText = block.text.substring(0, 80).replace(/\n/g, ' ');
+        break;
+      } else if (block.type === 'thinking') {
+        previewText = 'Thinking...';
         break;
       } else if (block.type === 'tool_use') {
         previewText = `Tool: ${block.name || 'unknown'}`;
@@ -695,8 +698,97 @@ export function renderMessagesTab(entry) {
       previewSpan.classList.toggle('hidden', isHidden);
     });
 
-    for (const block of blocks) {
-      if (block.type === 'text' && msg.role === 'user') {
+    // Pre-process blocks: group all thinking blocks together, skip empty text blocks
+    const processedBlocks = [];
+    // First pass: collect all thinking texts and non-empty non-thinking blocks
+    const thinkingTexts = [];
+    let thinkingInserted = false;
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      // Skip empty text blocks
+      if (block.type === 'text' && (!block.text || !block.text.trim())) continue;
+      // Collect all thinking blocks into one group
+      if (block.type === 'thinking') {
+        if (block.thinking) thinkingTexts.push(block.thinking);
+        continue;
+      }
+      // Insert the thinking group before the first non-thinking block
+      if (!thinkingInserted && thinkingTexts.length > 0) {
+        processedBlocks.push({ type: '_thinking_group', text: thinkingTexts.join('') });
+        thinkingInserted = true;
+      }
+      processedBlocks.push(block);
+    }
+    // If only thinking blocks (no other blocks after), insert at end
+    if (!thinkingInserted && thinkingTexts.length > 0) {
+      processedBlocks.push({ type: '_thinking_group', text: thinkingTexts.join('') });
+    }
+
+    for (const block of processedBlocks) {
+      if (block.type === '_thinking_group') {
+        // Render grouped thinking as a collapsible section
+        const thinkDiv = document.createElement('div');
+        thinkDiv.className = 'thinking-block';
+
+        const thinkHeader = document.createElement('div');
+        thinkHeader.className = 'thinking-header';
+        thinkHeader.style.cursor = 'pointer';
+
+        const thinkIcon = document.createElement('span');
+        thinkIcon.className = 'tool-result-toggle-icon';
+        thinkIcon.textContent = '\u25B6';
+        thinkHeader.appendChild(thinkIcon);
+
+        const thinkLabel = document.createElement('span');
+        thinkLabel.textContent = 'Thinking';
+        thinkHeader.appendChild(thinkLabel);
+        thinkDiv.appendChild(thinkHeader);
+
+        const thinkBody = document.createElement('div');
+        thinkBody.className = 'thinking-body hidden';
+
+        // Markdown with plain text toggle
+        const wrapper = document.createElement('div');
+        wrapper.className = 'md-toggle-wrapper';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'md-toggle-btn';
+        toggleBtn.textContent = 'Plain Text';
+        toggleBtn.title = 'Toggle between formatted and plain text';
+
+        const mdView = renderMarkdownContent(block.text);
+        mdView.classList.add('hidden');
+        const plainView = document.createElement('pre');
+        plainView.className = 'plain-text-view';
+        plainView.textContent = block.text;
+
+        toggleBtn.addEventListener('click', () => {
+          const showingPlain = !plainView.classList.contains('hidden');
+          if (showingPlain) {
+            plainView.classList.add('hidden');
+            mdView.classList.remove('hidden');
+            toggleBtn.textContent = 'Plain Text';
+          } else {
+            mdView.classList.add('hidden');
+            plainView.classList.remove('hidden');
+            toggleBtn.textContent = 'Formatted';
+          }
+        });
+
+        wrapper.appendChild(toggleBtn);
+        wrapper.appendChild(mdView);
+        wrapper.appendChild(plainView);
+        thinkBody.appendChild(wrapper);
+
+        thinkHeader.addEventListener('click', () => {
+          const isHidden = thinkBody.classList.contains('hidden');
+          thinkBody.classList.toggle('hidden');
+          thinkIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
+        });
+
+        thinkDiv.appendChild(thinkBody);
+        body.appendChild(thinkDiv);
+      } else if (block.type === 'text' && msg.role === 'user') {
         // Render user messages with full markdown formatting + plain text toggle
         const rawText = block.text || '';
         const wrapper = document.createElement('div');

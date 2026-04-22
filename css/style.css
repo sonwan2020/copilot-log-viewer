@@ -586,6 +586,37 @@ html, body {
   gap: 6px;
 }
 
+/* ===== Thinking Block ===== */
+.thinking-block {
+  background: var(--bg-tertiary, #f0f4f8);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin: 4px 0;
+}
+
+[data-theme="dark"] .thinking-block {
+  background: #1e293b;
+}
+
+.thinking-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6366f1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+[data-theme="dark"] .thinking-header {
+  color: #a5b4fc;
+}
+
+.thinking-body.hidden {
+  display: none;
+}
+
 .tool-result-block {
   background: var(--tool-result-bg);
   border: 1px solid var(--border-color);

@@ -285,6 +285,8 @@ function selectEntry(index) {
     state.searchMatchIndex = -1;
     setActiveTab('messages');
     updateSearchNav();
+    // Scroll to bottom of tab content
+    tabContent.scrollTop = tabContent.scrollHeight;
   }
 
   // Update active entry in sidebar
