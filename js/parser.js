@@ -93,13 +93,37 @@ export function parseSSEResponse(sseText) {
       // Extract content from OpenAI-format streaming
       if (data.choices) {
         for (const choice of data.choices) {
-          if (choice.delta?.content) {
-            content += choice.delta.content;
-            deltaRows.push({
-              created: data.created || null,
-              delta: choice.delta.content,
-            });
+          const deltaContent = choice.delta?.content || null;
+          const deltaReasoning = choice.delta?.reasoning_text || null;
+          const deltaToolCalls = choice.delta?.tool_calls || null;
+
+          // Build a row if there's any delta data
+          if (deltaContent || deltaReasoning || deltaToolCalls) {
+            const row = { created: data.created || null, fields: [], chunkIndex: chunks.length - 1 };
+
+            if (deltaContent) {
+              content += deltaContent;
+              row.type = 'content';
+              row.fields.push({ label: 'content', value: deltaContent });
+            }
+            if (deltaReasoning) {
+              row.type = 'reasoning_text';
+              row.fields.push({ label: 'reasoning_text', value: deltaReasoning });
+            }
+            if (deltaToolCalls) {
+              row.type = 'function';
+              for (const tc of deltaToolCalls) {
+                if (tc.id) row.fields.push({ label: 'function id', value: tc.id });
+                if (tc.function?.name) row.fields.push({ label: 'function name', value: tc.function.name });
+                if (tc.function?.arguments) row.fields.push({ label: 'function arguments', value: tc.function.arguments, isJson: true });
+              }
+            }
+
+            if (row.fields.length > 0) {
+              deltaRows.push(row);
+            }
           }
+
           if (choice.finish_reason && !finishReason) {
             finishReason = choice.finish_reason;
           }

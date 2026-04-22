@@ -784,6 +784,146 @@ html, body {
   word-break: break-all;
 }
 
+.sse-delta-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sse-delta-group {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  background: var(--bg-primary);
+}
+
+.sse-delta-group-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sse-delta-group-summary .sse-delta-field-value {
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+}
+
+.sse-delta-count-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sse-delta-detail {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.sse-delta-detail summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.sse-delta-chunk-list {
+  margin-top: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.sse-delta-chunk {
+  display: flex;
+  gap: 8px;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--border-light);
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.sse-delta-chunk:last-child {
+  border-bottom: none;
+}
+
+.sse-delta-chunk-idx {
+  color: var(--text-muted);
+  font-size: 10px;
+  min-width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.sse-delta-chunk-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
+
+.sse-delta-chunk-json {
+  margin: 0;
+  padding: 6px 10px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.sse-delta-chunk-json:last-child {
+  border-bottom: none;
+}
+
+.sse-delta-func {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.sse-delta-func:last-child {
+  border-bottom: none;
+}
+
+.sse-delta-field {
+  margin-bottom: 2px;
+}
+
+.sse-delta-field:last-child {
+  margin-bottom: 0;
+}
+
+.sse-delta-field-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.sse-delta-field-value {
+  color: var(--text-primary);
+}
+
+.sse-delta-json {
+  margin: 2px 0 0 0;
+  padding: 4px 8px;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .sse-meta-lines {
   display: flex;
   gap: 8px;

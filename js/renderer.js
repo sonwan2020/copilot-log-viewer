@@ -995,43 +995,194 @@ export function renderResponseTab(entry) {
       formattedView.appendChild(metaTable);
     }
 
-    // Delta table
+    // Delta groups — group consecutive rows of the same type
     if (parsed.deltaRows.length > 0) {
-      const deltaTable = document.createElement('table');
-      deltaTable.className = 'sse-delta-table';
+      const groups = [];
+      let currentGroup = null;
 
-      const thead = document.createElement('thead');
-      thead.innerHTML = '<tr><th>#</th><th>Created</th><th>Delta Content</th></tr>';
-      deltaTable.appendChild(thead);
-
-      const tbody = document.createElement('tbody');
-      parsed.deltaRows.forEach((row, i) => {
-        const tr = document.createElement('tr');
-
-        const idxTd = document.createElement('td');
-        idxTd.className = 'sse-delta-idx';
-        idxTd.textContent = i;
-        tr.appendChild(idxTd);
-
-        const createdTd = document.createElement('td');
-        createdTd.className = 'sse-delta-created';
-        if (row.created) {
-          const d = new Date(row.created * 1000);
-          createdTd.textContent = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        } else {
-          createdTd.textContent = '-';
+      for (const row of parsed.deltaRows) {
+        const groupType = row.type || 'content';
+        if (!currentGroup || currentGroup.type !== groupType) {
+          currentGroup = { type: groupType, rows: [] };
+          groups.push(currentGroup);
         }
-        tr.appendChild(createdTd);
+        currentGroup.rows.push(row);
+      }
 
-        const deltaTd = document.createElement('td');
-        deltaTd.className = 'sse-delta-content';
-        deltaTd.textContent = row.delta;
-        tr.appendChild(deltaTd);
+      const deltaSection = document.createElement('div');
+      deltaSection.className = 'sse-delta-groups';
 
-        tbody.appendChild(tr);
+      groups.forEach((group, gi) => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'sse-delta-group';
+
+        if (group.type === 'content' || group.type === 'reasoning_text') {
+          // Concatenate all text values
+          const allText = group.rows.map(r => {
+            const field = r.fields.find(f => f.label === group.type);
+            return field ? field.value : '';
+          }).join('');
+
+          // Summary line
+          const summary = document.createElement('div');
+          summary.className = 'sse-delta-group-summary';
+
+          const labelSpan = document.createElement('span');
+          labelSpan.className = 'sse-delta-field-label';
+          labelSpan.textContent = group.type + ': ';
+          summary.appendChild(labelSpan);
+
+          const valueSpan = document.createElement('span');
+          valueSpan.className = 'sse-delta-field-value';
+          valueSpan.textContent = allText;
+          summary.appendChild(valueSpan);
+
+          groupDiv.appendChild(summary);
+
+          // Collapsible detail: individual chunks
+          if (group.rows.length > 1) {
+            const details = document.createElement('details');
+            details.className = 'sse-delta-detail';
+            const detailSummary = document.createElement('summary');
+            detailSummary.textContent = `Show ${group.rows.length} individual chunks`;
+            details.appendChild(detailSummary);
+
+            const chunkList = document.createElement('div');
+            chunkList.className = 'sse-delta-chunk-list';
+            group.rows.forEach((row) => {
+              const pre = document.createElement('pre');
+              pre.className = 'sse-delta-chunk-json';
+              const originalChunk = parsed.chunks[row.chunkIndex];
+              pre.textContent = originalChunk ? JSON.stringify(originalChunk) : '';
+              chunkList.appendChild(pre);
+            });
+            details.appendChild(chunkList);
+            groupDiv.appendChild(details);
+          }
+
+        } else if (group.type === 'function') {
+          // Group function rows by function id
+          const funcCalls = [];
+          let currentFunc = null;
+
+          for (const row of group.rows) {
+            const idField = row.fields.find(f => f.label === 'function id');
+            const nameField = row.fields.find(f => f.label === 'function name');
+
+            // New function call starts when we see a function id
+            if (idField) {
+              currentFunc = { id: idField.value, name: '', args: '', rowCount: 0 };
+              funcCalls.push(currentFunc);
+              if (nameField) currentFunc.name = nameField.value;
+            }
+
+            // If no current function yet, create a default one
+            if (!currentFunc) {
+              currentFunc = { id: '', name: '', args: '', rowCount: 0 };
+              funcCalls.push(currentFunc);
+            }
+
+            currentFunc.rowCount++;
+
+            // Accumulate name and arguments
+            if (!idField && nameField) {
+              currentFunc.name = nameField.value;
+            }
+            const argsField = row.fields.find(f => f.label === 'function arguments');
+            if (argsField) {
+              currentFunc.args += argsField.value;
+            }
+          }
+
+          for (const fc of funcCalls) {
+            const funcDiv = document.createElement('div');
+            funcDiv.className = 'sse-delta-func';
+
+            if (fc.id) {
+              const idDiv = document.createElement('div');
+              idDiv.className = 'sse-delta-field';
+              const idLabel = document.createElement('span');
+              idLabel.className = 'sse-delta-field-label';
+              idLabel.textContent = 'id: ';
+              idDiv.appendChild(idLabel);
+              const idVal = document.createElement('span');
+              idVal.className = 'sse-delta-field-value';
+              idVal.textContent = fc.id;
+              idDiv.appendChild(idVal);
+              funcDiv.appendChild(idDiv);
+            }
+
+            if (fc.name) {
+              const nameDiv = document.createElement('div');
+              nameDiv.className = 'sse-delta-field';
+              const nameLabel = document.createElement('span');
+              nameLabel.className = 'sse-delta-field-label';
+              nameLabel.textContent = 'name: ';
+              nameDiv.appendChild(nameLabel);
+              const nameVal = document.createElement('span');
+              nameVal.className = 'sse-delta-field-value';
+              nameVal.textContent = fc.name;
+              nameDiv.appendChild(nameVal);
+              funcDiv.appendChild(nameDiv);
+            }
+
+            if (fc.args) {
+              const argsDiv = document.createElement('div');
+              argsDiv.className = 'sse-delta-field';
+              const argsLabel = document.createElement('span');
+              argsLabel.className = 'sse-delta-field-label';
+              argsLabel.textContent = 'arguments: ';
+              argsDiv.appendChild(argsLabel);
+              const pre = document.createElement('pre');
+              pre.className = 'sse-delta-json';
+              try {
+                pre.textContent = JSON.stringify(JSON.parse(fc.args), null, 2);
+              } catch {
+                pre.textContent = fc.args;
+              }
+              argsDiv.appendChild(pre);
+              funcDiv.appendChild(argsDiv);
+            }
+
+            // Show individual chunks toggle
+            if (fc.rowCount > 1) {
+              const details = document.createElement('details');
+              details.className = 'sse-delta-detail';
+              const detailSummary = document.createElement('summary');
+              detailSummary.textContent = `Show ${fc.rowCount} individual chunks`;
+              details.appendChild(detailSummary);
+
+              // Replay the rows for this function to build chunk list
+              const chunkList = document.createElement('div');
+              chunkList.className = 'sse-delta-chunk-list';
+              let inFunc = false;
+              for (const row of group.rows) {
+                const ridField = row.fields.find(f => f.label === 'function id');
+                if (ridField && ridField.value === fc.id) {
+                  inFunc = true;
+                } else if (ridField && ridField.value !== fc.id) {
+                  if (inFunc) break;
+                }
+                if (inFunc) {
+                  const pre = document.createElement('pre');
+                  pre.className = 'sse-delta-chunk-json';
+                  const originalChunk = parsed.chunks[row.chunkIndex];
+                  pre.textContent = originalChunk ? JSON.stringify(originalChunk) : '';
+                  chunkList.appendChild(pre);
+                }
+              }
+              details.appendChild(chunkList);
+              funcDiv.appendChild(details);
+            }
+
+            groupDiv.appendChild(funcDiv);
+          }
+        }
+
+        deltaSection.appendChild(groupDiv);
       });
-      deltaTable.appendChild(tbody);
-      formattedView.appendChild(deltaTable);
+
+      formattedView.appendChild(deltaSection);
     }
 
     // Special lines: finish_reason and [DONE]
