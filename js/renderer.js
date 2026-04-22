@@ -1154,32 +1154,74 @@ export function renderResponseTab(entry) {
   const container = document.createElement('div');
   const parsed = parseSSEResponse(entry.copilotResponse);
 
-  // Assembled content
+  // Assembled content (collapsible, expanded by default)
   const contentSection = document.createElement('div');
   contentSection.className = 'response-content';
+
+  const contentHeader = document.createElement('div');
+  contentHeader.className = 'response-section-header';
+
   const contentTitle = document.createElement('h3');
   contentTitle.textContent = 'Assembled Response';
-  contentTitle.style.marginBottom = '8px';
-  contentTitle.style.fontSize = '14px';
-  contentSection.appendChild(contentTitle);
+  contentHeader.appendChild(contentTitle);
+
+  const contentArrow = document.createElement('span');
+  contentArrow.className = 'response-section-arrow';
+  contentArrow.textContent = '\u25BC';
+  contentHeader.appendChild(contentArrow);
+
+  contentSection.appendChild(contentHeader);
+
+  const contentBody = document.createElement('div');
 
   if (parsed.content) {
-    contentSection.appendChild(createLazyToggleWrapper(parsed.content));
+    contentBody.appendChild(createLazyToggleWrapper(parsed.content));
   } else {
     const empty = document.createElement('div');
     empty.style.color = 'var(--text-muted)';
     empty.textContent = 'No content extracted from response.';
-    contentSection.appendChild(empty);
+    contentBody.appendChild(empty);
   }
+
+  contentHeader.addEventListener('click', () => {
+    const isHidden = contentBody.classList.contains('hidden');
+    contentBody.classList.toggle('hidden');
+    contentArrow.textContent = isHidden ? '\u25BC' : '\u25B6';
+  });
+
+  contentSection.appendChild(contentBody);
   container.appendChild(contentSection);
 
-  // Usage stats
+  // Usage stats (collapsible, expanded by default)
   if (parsed.usage) {
+    const usageSection = document.createElement('div');
+    usageSection.style.marginBottom = '16px';
+
+    const usageHeader = document.createElement('div');
+    usageHeader.className = 'response-section-header';
+
     const usageTitle = document.createElement('h3');
     usageTitle.textContent = 'Usage Statistics';
-    usageTitle.style.marginBottom = '8px';
-    usageTitle.style.fontSize = '14px';
-    container.appendChild(usageTitle);
+    usageHeader.appendChild(usageTitle);
+
+    const usageArrow = document.createElement('span');
+    usageArrow.className = 'response-section-arrow';
+    usageArrow.textContent = '\u25BC';
+    usageHeader.appendChild(usageArrow);
+
+    usageSection.appendChild(usageHeader);
+
+    const usageBody = document.createElement('div');
+
+    // Response model (shown before the table)
+    if (parsed.model) {
+      const modelInfo = document.createElement('div');
+      modelInfo.style.fontSize = '20px';
+      modelInfo.style.marginBottom = '8px';
+      modelInfo.style.color = 'var(--text-secondary)';
+      modelInfo.innerHTML = `Response Model: <strong style="color:var(--text-primary)">${escapeHtml(parsed.model)}</strong>`;
+      usageBody.appendChild(modelInfo);
+    }
 
     const table = document.createElement('table');
     table.className = 'usage-table';
@@ -1203,44 +1245,69 @@ export function renderResponseTab(entry) {
       row.innerHTML = `<td class="usage-table-label">${escapeHtml(label)}</td><td class="usage-table-value">${Number(value).toLocaleString()}</td>`;
       table.appendChild(row);
     }
-    container.appendChild(table);
+    usageBody.appendChild(table);
+
+    usageHeader.addEventListener('click', () => {
+      const isHidden = usageBody.classList.contains('hidden');
+      usageBody.classList.toggle('hidden');
+      usageArrow.textContent = isHidden ? '\u25BC' : '\u25B6';
+    });
+
+    usageSection.appendChild(usageBody);
+    container.appendChild(usageSection);
   }
 
-  // Response model
-  if (parsed.model) {
-    const modelInfo = document.createElement('div');
-    modelInfo.style.marginTop = '12px';
-    modelInfo.style.fontSize = '13px';
-    modelInfo.style.color = 'var(--text-secondary)';
-    modelInfo.textContent = `Response Model: ${parsed.model}`;
-    container.appendChild(modelInfo);
-  }
-
-  // SSE Response section with formatted/raw toggle
+  // SSE Response section with formatted/raw toggle (collapsible, expanded by default)
   if (entry.copilotResponse) {
     const sseSection = document.createElement('div');
     sseSection.style.marginTop = '16px';
 
     const sseHeader = document.createElement('div');
-    sseHeader.style.display = 'flex';
-    sseHeader.style.alignItems = 'center';
-    sseHeader.style.gap = '8px';
-    sseHeader.style.marginBottom = '8px';
+    sseHeader.className = 'response-section-header';
 
     const sseTitle = document.createElement('h3');
     sseTitle.textContent = 'SSE Response';
-    sseTitle.style.fontSize = '14px';
-    sseTitle.style.margin = '0';
     sseHeader.appendChild(sseTitle);
+
+    const sseRight = document.createElement('div');
+    sseRight.className = 'response-section-header-right';
+
+    const sseArrow = document.createElement('span');
+    sseArrow.className = 'response-section-arrow';
+    sseArrow.textContent = '\u25BC';
+    sseRight.appendChild(sseArrow);
 
     const sseToggleBtn = document.createElement('button');
     sseToggleBtn.className = 'sse-toggle-btn';
     sseToggleBtn.textContent = 'Raw';
     sseToggleBtn.title = 'Toggle between formatted and raw SSE';
-    sseHeader.appendChild(sseToggleBtn);
+    sseToggleBtn.addEventListener('click', (e) => e.stopPropagation());
+    sseRight.appendChild(sseToggleBtn);
 
+    sseHeader.appendChild(sseRight);
     sseSection.appendChild(sseHeader);
 
+    const sseBody = document.createElement('div');
+    renderSseBody(sseBody, parsed, entry, sseToggleBtn);
+
+    sseHeader.addEventListener('click', () => {
+      const isHidden = sseBody.classList.contains('hidden');
+      sseBody.classList.toggle('hidden');
+      sseArrow.textContent = isHidden ? '\u25BC' : '\u25B6';
+    });
+
+    sseSection.appendChild(sseBody);
+    container.appendChild(sseSection);
+  }
+
+  return container;
+}
+
+/**
+ * Render the SSE Response body content (formatted + raw views).
+ * Called lazily on first expand.
+ */
+function renderSseBody(sseBody, parsed, entry, sseToggleBtn) {
     // === Formatted SSE view (default, visible) ===
     const formattedView = document.createElement('div');
     formattedView.className = 'sse-formatted-view';
@@ -1263,7 +1330,14 @@ export function renderResponseTab(entry) {
 
       for (const { label, value } of metaItems) {
         const row = document.createElement('tr');
-        row.innerHTML = `<td class="usage-table-label">${escapeHtml(label)}</td><td class="usage-table-value" style="font-size:13px;font-weight:normal;text-align:left;">${escapeHtml(String(value))}</td>`;
+        const labelTd = document.createElement('td');
+        labelTd.className = 'usage-table-label';
+        labelTd.textContent = label;
+        const valueTd = document.createElement('td');
+        valueTd.className = 'usage-table-value sse-meta-value';
+        valueTd.textContent = String(value);
+        row.appendChild(labelTd);
+        row.appendChild(valueTd);
         metaTable.appendChild(row);
       }
       formattedView.appendChild(metaTable);
@@ -1303,11 +1377,8 @@ export function renderResponseTab(entry) {
           titleDiv.textContent = group.type === 'content' ? 'Content' : 'Reasoning';
           groupDiv.appendChild(titleDiv);
 
-          // Grouped text
-          const textDiv = document.createElement('div');
-          textDiv.className = 'sse-delta-group-text';
-          textDiv.textContent = allText;
-          groupDiv.appendChild(textDiv);
+          // Grouped text with Formatted / Plain Text toggle
+          groupDiv.appendChild(createLazyToggleWrapper(allText));
 
           // Collapsible detail: individual chunks
           if (group.rows.length > 1) {
@@ -1499,13 +1570,13 @@ export function renderResponseTab(entry) {
       formattedView.appendChild(metaLines);
     }
 
-    sseSection.appendChild(formattedView);
+    sseBody.appendChild(formattedView);
 
     // === Raw SSE view (hidden by default) ===
     const rawView = document.createElement('div');
     rawView.className = 'hidden';
     rawView.appendChild(createJsonView(entry.copilotResponse));
-    sseSection.appendChild(rawView);
+    sseBody.appendChild(rawView);
 
     // Toggle handler
     sseToggleBtn.addEventListener('click', () => {
@@ -1520,11 +1591,6 @@ export function renderResponseTab(entry) {
         sseToggleBtn.textContent = 'Raw';
       }
     });
-
-    container.appendChild(sseSection);
-  }
-
-  return container;
 }
 
 /**
