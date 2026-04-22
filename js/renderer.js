@@ -290,9 +290,71 @@ function formatInlineMarkdown(text) {
 }
 
 /**
+ * File extension → code language mapping for syntax highlighting.
+ */
+const EXT_LANG_MAP = {
+  '.json': 'json',
+  '.js': 'javascript',
+  '.mjs': 'javascript',
+  '.cjs': 'javascript',
+  '.ts': 'typescript',
+  '.tsx': 'typescript',
+  '.jsx': 'javascript',
+  '.html': 'html',
+  '.htm': 'html',
+  '.css': 'css',
+  '.scss': 'css',
+  '.less': 'css',
+  '.xml': 'xml',
+  '.svg': 'xml',
+  '.yaml': 'yaml',
+  '.yml': 'yaml',
+  '.py': 'python',
+  '.java': 'java',
+  '.cs': 'csharp',
+  '.c': 'c',
+  '.cpp': 'cpp',
+  '.h': 'c',
+  '.hpp': 'cpp',
+  '.go': 'go',
+  '.rs': 'rust',
+  '.rb': 'ruby',
+  '.php': 'php',
+  '.sh': 'bash',
+  '.bash': 'bash',
+  '.zsh': 'bash',
+  '.ps1': 'powershell',
+  '.sql': 'sql',
+  '.kt': 'kotlin',
+  '.swift': 'swift',
+  '.r': 'r',
+  '.lua': 'lua',
+  '.md': null, // markdown renders via renderMarkdownContent
+  '.txt': null,
+};
+
+/**
+ * Detect code language from a Read-type tool's input file path.
+ * Returns language string or null (for markdown fallback).
+ */
+function detectLangFromToolInput(toolName, input) {
+  if (!toolName || !input) return null;
+  // Only detect for Read-type tools
+  const name = toolName.toLowerCase();
+  if (name !== 'read' && name !== 'readfile' && name !== 'read_file') return null;
+  // Extract file path from input
+  const filePath = typeof input === 'string' ? input : (input.file_path || input.path || input.filePath || '');
+  if (!filePath) return null;
+  const dotIdx = filePath.lastIndexOf('.');
+  if (dotIdx < 0) return null;
+  const ext = filePath.slice(dotIdx).toLowerCase();
+  return EXT_LANG_MAP.hasOwnProperty(ext) ? EXT_LANG_MAP[ext] : null;
+}
+
+/**
  * Render a single content block.
  */
-function renderContentBlock(block) {
+function renderContentBlock(block, toolUseMap) {
   if (block.type === 'text') {
     return renderTextContent(block.text || '');
   }
@@ -303,12 +365,13 @@ function renderContentBlock(block) {
 
     const header = document.createElement('div');
     header.className = 'tool-use-header';
-    header.textContent = `Tool Call: ${block.name || 'unknown'}`;
+    header.textContent = `Tool Call: ${block.name || 'unknown'}${block.id ? ` (${block.id})` : ''}`;
     div.appendChild(header);
 
     if (block.input) {
       const details = document.createElement('details');
       details.className = 'collapsible';
+      details.open = true;
       const summary = document.createElement('summary');
       summary.textContent = 'Input';
       const badge = document.createElement('span');
@@ -333,16 +396,157 @@ function renderContentBlock(block) {
     const div = document.createElement('div');
     div.className = 'tool-result-block';
 
+    // Look up linked tool_use info
+    const toolInfo = (toolUseMap && block.tool_use_id) ? toolUseMap.get(block.tool_use_id) : null;
+    const toolName = toolInfo?.name || 'unknown';
+
+    // Header with tool name and id (always visible)
     const header = document.createElement('div');
     header.className = 'tool-result-header';
-    header.textContent = `Tool Result${block.tool_use_id ? ` (${block.tool_use_id.substring(0, 8)}...)` : ''}`;
+    header.textContent = `Tool Result: ${toolName}${block.tool_use_id ? ` (${block.tool_use_id})` : ''}`;
     div.appendChild(header);
 
+    // Show linked tool input (always visible, outside collapsible)
+    if (toolInfo?.input) {
+      const inputSection = document.createElement('div');
+      inputSection.className = 'tool-result-linked-input';
+      const inputLabel = document.createElement('div');
+      inputLabel.className = 'tool-result-input-label';
+      inputLabel.textContent = 'Input';
+      inputSection.appendChild(inputLabel);
+      inputSection.appendChild(createJsonView(toolInfo.input));
+      div.appendChild(inputSection);
+    }
+
+    // Collapsible content section (hidden by default)
     if (block.content) {
+      const contentHeader = document.createElement('div');
+      contentHeader.className = 'tool-result-content-header';
+      contentHeader.style.cursor = 'pointer';
+
+      const toggleIcon = document.createElement('span');
+      toggleIcon.className = 'tool-result-toggle-icon';
+      toggleIcon.textContent = '\u25B6';
+      contentHeader.appendChild(toggleIcon);
+
+      const contentLabel = document.createElement('span');
+      contentLabel.textContent = 'Content';
+      contentHeader.appendChild(contentLabel);
+      div.appendChild(contentHeader);
+
+      const body = document.createElement('div');
+      body.className = 'tool-result-body hidden';
+
+      contentHeader.addEventListener('click', () => {
+        const isHidden = body.classList.contains('hidden');
+        body.classList.toggle('hidden');
+        toggleIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
+      });
+
       const contentBlocks = normalizeContent(block.content);
       for (const cb of contentBlocks) {
-        div.appendChild(renderContentBlock(cb));
+        if (cb.type === 'text') {
+          const rawText = cb.text || '';
+          const trimmedText = rawText.trim();
+
+          // Try to detect if content is JSON
+          if ((trimmedText.startsWith('{') || trimmedText.startsWith('[')) && trimmedText.length > 1) {
+            try {
+              const parsed = JSON.parse(trimmedText);
+              body.appendChild(createJsonView(parsed));
+              continue;
+            } catch {
+              // Not valid JSON, fall through
+            }
+          }
+
+          // Detect file extension from linked Read tool input for syntax highlighting
+          const lang = detectLangFromToolInput(toolName, toolInfo?.input);
+          if (lang) {
+            // Render as syntax-highlighted code block
+            const wrapper = document.createElement('div');
+            wrapper.className = 'md-toggle-wrapper';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'md-toggle-btn';
+            toggleBtn.textContent = 'Plain Text';
+            toggleBtn.title = 'Toggle between formatted and plain text';
+
+            const codeWrapper = document.createElement('div');
+            codeWrapper.className = 'md-code-wrapper';
+            const langLabel = document.createElement('span');
+            langLabel.className = 'md-code-lang';
+            langLabel.textContent = lang;
+            codeWrapper.appendChild(langLabel);
+            const pre = document.createElement('pre');
+            pre.className = 'md-code-block';
+            const codeEl = document.createElement('code');
+            codeEl.className = `md-code lang-${lang}`;
+            codeEl.textContent = rawText;
+            pre.appendChild(codeEl);
+            codeWrapper.appendChild(pre);
+
+            const plainView = document.createElement('pre');
+            plainView.className = 'plain-text-view hidden';
+            plainView.textContent = rawText;
+
+            toggleBtn.addEventListener('click', () => {
+              const showingCode = !codeWrapper.classList.contains('hidden');
+              if (showingCode) {
+                codeWrapper.classList.add('hidden');
+                plainView.classList.remove('hidden');
+                toggleBtn.textContent = 'Formatted';
+              } else {
+                plainView.classList.add('hidden');
+                codeWrapper.classList.remove('hidden');
+                toggleBtn.textContent = 'Plain Text';
+              }
+            });
+
+            wrapper.appendChild(toggleBtn);
+            wrapper.appendChild(codeWrapper);
+            wrapper.appendChild(plainView);
+            body.appendChild(wrapper);
+          } else {
+            // Default: render as markdown with plain text toggle
+            const wrapper = document.createElement('div');
+            wrapper.className = 'md-toggle-wrapper';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'md-toggle-btn';
+            toggleBtn.textContent = 'Plain Text';
+            toggleBtn.title = 'Toggle between formatted and plain text';
+
+            const mdView = renderMarkdownContent(rawText);
+            mdView.classList.add('hidden');
+            const plainView = document.createElement('pre');
+            plainView.className = 'plain-text-view';
+            plainView.textContent = rawText;
+
+            toggleBtn.addEventListener('click', () => {
+              const showingPlain = !plainView.classList.contains('hidden');
+              if (showingPlain) {
+                plainView.classList.add('hidden');
+                mdView.classList.remove('hidden');
+                toggleBtn.textContent = 'Plain Text';
+              } else {
+                mdView.classList.add('hidden');
+                plainView.classList.remove('hidden');
+                toggleBtn.textContent = 'Formatted';
+              }
+            });
+
+            wrapper.appendChild(toggleBtn);
+            wrapper.appendChild(mdView);
+            wrapper.appendChild(plainView);
+            body.appendChild(wrapper);
+          }
+        } else {
+          body.appendChild(renderContentBlock(cb, toolUseMap));
+        }
       }
+
+      div.appendChild(body);
     }
 
     return div;
@@ -378,7 +582,7 @@ export function renderEntryList(entries, container, onSelect) {
 
     item.innerHTML = `
       <div class="entry-item-header">
-        <span class="entry-item-index">#${i + 1}</span>
+        <span class="entry-item-index">#${entry._index}</span>
         <span class="entry-item-time">${escapeHtml(timeStr)}</span>
       </div>
       <div class="entry-item-model">
@@ -432,20 +636,159 @@ export function renderMessagesTab(entry) {
     return container;
   }
 
+  // Build a map of tool_use id → { name, input } for tool_result lookups
+  const toolUseMap = new Map();
+  for (const msg of messages) {
+    const blocks = normalizeContent(msg.content);
+    for (const block of blocks) {
+      if (block.type === 'tool_use' && block.id) {
+        toolUseMap.set(block.id, { name: block.name || 'unknown', input: block.input || null });
+      }
+    }
+  }
+
   for (const msg of messages) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${msg.role}`;
 
     const header = document.createElement('div');
     header.className = 'message-header';
-    header.innerHTML = `<span>${escapeHtml(msg.role.toUpperCase())}</span>`;
+    header.style.cursor = 'pointer';
+
+    const roleSpan = document.createElement('span');
+    roleSpan.textContent = msg.role.toUpperCase();
+    header.appendChild(roleSpan);
+
+    // Preview text for collapsed state
+    const blocks = normalizeContent(msg.content);
+    let previewText = '';
+    for (const block of blocks) {
+      if (block.type === 'text' && block.text && block.text.trim()) {
+        previewText = block.text.substring(0, 80).replace(/\n/g, ' ');
+        break;
+      } else if (block.type === 'thinking') {
+        previewText = 'Thinking...';
+        break;
+      } else if (block.type === 'tool_use') {
+        previewText = `Tool: ${block.name || 'unknown'}`;
+        break;
+      } else if (block.type === 'tool_result') {
+        const toolInfo = block.tool_use_id ? toolUseMap.get(block.tool_use_id) : null;
+        previewText = `Tool Result: ${toolInfo?.name || 'unknown'}`;
+        break;
+      }
+    }
+    const previewSpan = document.createElement('span');
+    previewSpan.className = 'message-preview';
+    previewSpan.textContent = previewText + (previewText.length >= 80 ? '...' : '');
+    header.appendChild(previewSpan);
+
+    const toggleIcon = document.createElement('span');
+    toggleIcon.className = 'message-toggle-icon';
+    toggleIcon.textContent = '\u25B6';
+    header.appendChild(toggleIcon);
 
     const body = document.createElement('div');
-    body.className = 'message-body';
+    body.className = 'message-body hidden';
 
-    const blocks = normalizeContent(msg.content);
-    for (const block of blocks) {
-      if (block.type === 'text' && msg.role === 'user') {
+    header.addEventListener('click', () => {
+      const isHidden = body.classList.contains('hidden');
+      body.classList.toggle('hidden');
+      toggleIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
+      previewSpan.classList.toggle('hidden', isHidden);
+    });
+
+    // Pre-process blocks: group all thinking blocks together, skip empty text blocks
+    const processedBlocks = [];
+    // First pass: collect all thinking texts and non-empty non-thinking blocks
+    const thinkingTexts = [];
+    let thinkingInserted = false;
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      // Skip empty text blocks
+      if (block.type === 'text' && (!block.text || !block.text.trim())) continue;
+      // Collect all thinking blocks into one group
+      if (block.type === 'thinking') {
+        if (block.thinking) thinkingTexts.push(block.thinking);
+        continue;
+      }
+      // Insert the thinking group before the first non-thinking block
+      if (!thinkingInserted && thinkingTexts.length > 0) {
+        processedBlocks.push({ type: '_thinking_group', text: thinkingTexts.join('') });
+        thinkingInserted = true;
+      }
+      processedBlocks.push(block);
+    }
+    // If only thinking blocks (no other blocks after), insert at end
+    if (!thinkingInserted && thinkingTexts.length > 0) {
+      processedBlocks.push({ type: '_thinking_group', text: thinkingTexts.join('') });
+    }
+
+    for (const block of processedBlocks) {
+      if (block.type === '_thinking_group') {
+        // Render grouped thinking as a collapsible section
+        const thinkDiv = document.createElement('div');
+        thinkDiv.className = 'thinking-block';
+
+        const thinkHeader = document.createElement('div');
+        thinkHeader.className = 'thinking-header';
+        thinkHeader.style.cursor = 'pointer';
+
+        const thinkIcon = document.createElement('span');
+        thinkIcon.className = 'tool-result-toggle-icon';
+        thinkIcon.textContent = '\u25B6';
+        thinkHeader.appendChild(thinkIcon);
+
+        const thinkLabel = document.createElement('span');
+        thinkLabel.textContent = 'Thinking';
+        thinkHeader.appendChild(thinkLabel);
+        thinkDiv.appendChild(thinkHeader);
+
+        const thinkBody = document.createElement('div');
+        thinkBody.className = 'thinking-body hidden';
+
+        // Markdown with plain text toggle
+        const wrapper = document.createElement('div');
+        wrapper.className = 'md-toggle-wrapper';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'md-toggle-btn';
+        toggleBtn.textContent = 'Plain Text';
+        toggleBtn.title = 'Toggle between formatted and plain text';
+
+        const mdView = renderMarkdownContent(block.text);
+        mdView.classList.add('hidden');
+        const plainView = document.createElement('pre');
+        plainView.className = 'plain-text-view';
+        plainView.textContent = block.text;
+
+        toggleBtn.addEventListener('click', () => {
+          const showingPlain = !plainView.classList.contains('hidden');
+          if (showingPlain) {
+            plainView.classList.add('hidden');
+            mdView.classList.remove('hidden');
+            toggleBtn.textContent = 'Plain Text';
+          } else {
+            mdView.classList.add('hidden');
+            plainView.classList.remove('hidden');
+            toggleBtn.textContent = 'Formatted';
+          }
+        });
+
+        wrapper.appendChild(toggleBtn);
+        wrapper.appendChild(mdView);
+        wrapper.appendChild(plainView);
+        thinkBody.appendChild(wrapper);
+
+        thinkHeader.addEventListener('click', () => {
+          const isHidden = thinkBody.classList.contains('hidden');
+          thinkBody.classList.toggle('hidden');
+          thinkIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
+        });
+
+        thinkDiv.appendChild(thinkBody);
+        body.appendChild(thinkDiv);
+      } else if (block.type === 'text' && msg.role === 'user') {
         // Render user messages with full markdown formatting + plain text toggle
         const rawText = block.text || '';
         const wrapper = document.createElement('div');
@@ -480,13 +823,24 @@ export function renderMessagesTab(entry) {
         wrapper.appendChild(plainView);
         body.appendChild(wrapper);
       } else {
-        body.appendChild(renderContentBlock(block));
+        body.appendChild(renderContentBlock(block, toolUseMap));
       }
     }
 
     msgDiv.appendChild(header);
     msgDiv.appendChild(body);
     container.appendChild(msgDiv);
+  }
+
+  // Expand the last message by default
+  const lastMsg = container.lastElementChild;
+  if (lastMsg) {
+    const lastBody = lastMsg.querySelector('.message-body');
+    const lastPreview = lastMsg.querySelector('.message-preview');
+    const lastIcon = lastMsg.querySelector('.message-toggle-icon');
+    if (lastBody) lastBody.classList.remove('hidden');
+    if (lastPreview) lastPreview.classList.add('hidden');
+    if (lastIcon) lastIcon.textContent = '\u25BC';
   }
 
   return container;
@@ -942,25 +1296,358 @@ export function renderResponseTab(entry) {
     container.appendChild(modelInfo);
   }
 
-  // Raw SSE (collapsible)
+  // SSE Response section with formatted/raw toggle
   if (entry.copilotResponse) {
-    const rawDetails = document.createElement('details');
-    rawDetails.className = 'collapsible';
-    rawDetails.style.marginTop = '16px';
-    const rawSummary = document.createElement('summary');
-    rawSummary.textContent = 'Raw SSE Response';
-    const badge = document.createElement('span');
-    badge.className = 'collapsible-badge';
-    badge.textContent = `${entry.copilotResponse.length} chars`;
-    rawSummary.appendChild(badge);
-    rawDetails.appendChild(rawSummary);
+    const sseSection = document.createElement('div');
+    sseSection.style.marginTop = '16px';
 
-    const rawContent = document.createElement('div');
-    rawContent.className = 'collapsible-content';
-    rawContent.appendChild(createJsonView(entry.copilotResponse));
-    rawDetails.appendChild(rawContent);
-    container.appendChild(rawDetails);
+    const sseHeader = document.createElement('div');
+    sseHeader.style.display = 'flex';
+    sseHeader.style.alignItems = 'center';
+    sseHeader.style.gap = '8px';
+    sseHeader.style.marginBottom = '8px';
+
+    const sseTitle = document.createElement('h3');
+    sseTitle.textContent = 'SSE Response';
+    sseTitle.style.fontSize = '14px';
+    sseTitle.style.margin = '0';
+    sseHeader.appendChild(sseTitle);
+
+    const sseToggleBtn = document.createElement('button');
+    sseToggleBtn.className = 'sse-toggle-btn';
+    sseToggleBtn.textContent = 'Raw';
+    sseToggleBtn.title = 'Toggle between formatted and raw SSE';
+    sseHeader.appendChild(sseToggleBtn);
+
+    sseSection.appendChild(sseHeader);
+
+    // === Formatted SSE view (default, visible) ===
+    const formattedView = document.createElement('div');
+    formattedView.className = 'sse-formatted-view';
+
+    // Header properties table (id, model, created)
+    const firstChunk = parsed.chunks[0];
+    if (firstChunk) {
+      const metaTable = document.createElement('table');
+      metaTable.className = 'usage-table';
+      metaTable.style.marginBottom = '12px';
+
+      const metaItems = [];
+      if (parsed.id) metaItems.push({ label: 'ID', value: parsed.id });
+      if (parsed.model) metaItems.push({ label: 'Model', value: parsed.model });
+      if (firstChunk.created) {
+        const createdDate = new Date(firstChunk.created * 1000);
+        metaItems.push({ label: 'Created', value: createdDate.toLocaleString() });
+      }
+      if (firstChunk.system_fingerprint) metaItems.push({ label: 'System Fingerprint', value: firstChunk.system_fingerprint });
+
+      for (const { label, value } of metaItems) {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td class="usage-table-label">${escapeHtml(label)}</td><td class="usage-table-value" style="font-size:13px;font-weight:normal;text-align:left;">${escapeHtml(String(value))}</td>`;
+        metaTable.appendChild(row);
+      }
+      formattedView.appendChild(metaTable);
+    }
+
+    // Delta groups — group consecutive rows of the same type
+    if (parsed.deltaRows.length > 0) {
+      const groups = [];
+      let currentGroup = null;
+
+      for (const row of parsed.deltaRows) {
+        const groupType = row.type || 'content';
+        if (!currentGroup || currentGroup.type !== groupType) {
+          currentGroup = { type: groupType, rows: [] };
+          groups.push(currentGroup);
+        }
+        currentGroup.rows.push(row);
+      }
+
+      const deltaSection = document.createElement('div');
+      deltaSection.className = 'sse-delta-groups';
+
+      groups.forEach((group, gi) => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'sse-delta-group';
+
+        if (group.type === 'content' || group.type === 'reasoning_text') {
+          // Concatenate all text values
+          const allText = group.rows.map(r => {
+            const field = r.fields.find(f => f.label === group.type);
+            return field ? field.value : '';
+          }).join('');
+
+          // Title
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'sse-delta-group-title';
+          titleDiv.textContent = group.type === 'content' ? 'Content' : 'Reasoning';
+          groupDiv.appendChild(titleDiv);
+
+          // Grouped text
+          const textDiv = document.createElement('div');
+          textDiv.className = 'sse-delta-group-text';
+          textDiv.textContent = allText;
+          groupDiv.appendChild(textDiv);
+
+          // Collapsible detail: individual chunks
+          if (group.rows.length > 1) {
+            const details = document.createElement('details');
+            details.className = 'sse-delta-detail';
+            const detailSummary = document.createElement('summary');
+            detailSummary.textContent = `Show ${group.rows.length} individual chunks`;
+            details.appendChild(detailSummary);
+
+            const chunkList = document.createElement('div');
+            chunkList.className = 'sse-delta-chunk-list';
+            group.rows.forEach((row) => {
+              const pre = document.createElement('pre');
+              pre.className = 'sse-delta-chunk-json';
+              const originalChunk = parsed.chunks[row.chunkIndex];
+              pre.textContent = originalChunk ? JSON.stringify(originalChunk) : '';
+              chunkList.appendChild(pre);
+            });
+            details.appendChild(chunkList);
+            groupDiv.appendChild(details);
+          }
+
+        } else if (group.type === 'function') {
+          // Group function rows by function id
+          const funcCalls = [];
+          let currentFunc = null;
+
+          for (const row of group.rows) {
+            const idField = row.fields.find(f => f.label === 'function id');
+            const nameField = row.fields.find(f => f.label === 'function name');
+
+            // New function call starts when we see a function id
+            if (idField) {
+              currentFunc = { id: idField.value, name: '', args: '', rowCount: 0 };
+              funcCalls.push(currentFunc);
+              if (nameField) currentFunc.name = nameField.value;
+            }
+
+            // If no current function yet, create a default one
+            if (!currentFunc) {
+              currentFunc = { id: '', name: '', args: '', rowCount: 0 };
+              funcCalls.push(currentFunc);
+            }
+
+            currentFunc.rowCount++;
+
+            // Accumulate name and arguments
+            if (!idField && nameField) {
+              currentFunc.name = nameField.value;
+            }
+            const argsField = row.fields.find(f => f.label === 'function arguments');
+            if (argsField) {
+              currentFunc.args += argsField.value;
+            }
+          }
+
+          for (const fc of funcCalls) {
+            const funcDiv = document.createElement('div');
+            funcDiv.className = 'sse-delta-func';
+
+            // Title
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'sse-delta-group-title';
+            titleDiv.textContent = 'Function';
+            funcDiv.appendChild(titleDiv);
+
+            // Fields grid
+            const fieldsGrid = document.createElement('div');
+            fieldsGrid.className = 'sse-delta-func-grid';
+
+            if (fc.id) {
+              const idLabel = document.createElement('span');
+              idLabel.className = 'sse-delta-func-label';
+              idLabel.textContent = 'Id';
+              fieldsGrid.appendChild(idLabel);
+              const idSep = document.createElement('span');
+              idSep.className = 'sse-delta-func-sep';
+              idSep.textContent = ':';
+              fieldsGrid.appendChild(idSep);
+              const idVal = document.createElement('span');
+              idVal.className = 'sse-delta-func-value';
+              idVal.textContent = fc.id;
+              fieldsGrid.appendChild(idVal);
+            }
+
+            if (fc.name) {
+              const nameLabel = document.createElement('span');
+              nameLabel.className = 'sse-delta-func-label';
+              nameLabel.textContent = 'Name';
+              fieldsGrid.appendChild(nameLabel);
+              const nameSep = document.createElement('span');
+              nameSep.className = 'sse-delta-func-sep';
+              nameSep.textContent = ':';
+              fieldsGrid.appendChild(nameSep);
+              const nameVal = document.createElement('span');
+              nameVal.className = 'sse-delta-func-value';
+              nameVal.textContent = fc.name;
+              fieldsGrid.appendChild(nameVal);
+            }
+
+            if (fc.args) {
+              const argsLabel = document.createElement('span');
+              argsLabel.className = 'sse-delta-func-label';
+              argsLabel.textContent = 'Arguments';
+              fieldsGrid.appendChild(argsLabel);
+              const argsSep = document.createElement('span');
+              argsSep.className = 'sse-delta-func-sep';
+              argsSep.textContent = ':';
+              fieldsGrid.appendChild(argsSep);
+              const argsVal = document.createElement('span');
+              argsVal.className = 'sse-delta-func-value';
+              fieldsGrid.appendChild(argsVal);
+            }
+
+            funcDiv.appendChild(fieldsGrid);
+
+            if (fc.args) {
+              const pre = document.createElement('pre');
+              pre.className = 'sse-delta-json';
+              try {
+                pre.textContent = JSON.stringify(JSON.parse(fc.args), null, 2);
+              } catch {
+                pre.textContent = fc.args;
+              }
+              funcDiv.appendChild(pre);
+            }
+
+            // Show individual chunks toggle
+            if (fc.rowCount > 1) {
+              const details = document.createElement('details');
+              details.className = 'sse-delta-detail';
+              const detailSummary = document.createElement('summary');
+              detailSummary.textContent = `Show ${fc.rowCount} individual chunks`;
+              details.appendChild(detailSummary);
+
+              // Replay the rows for this function to build chunk list
+              const chunkList = document.createElement('div');
+              chunkList.className = 'sse-delta-chunk-list';
+              let inFunc = false;
+              for (const row of group.rows) {
+                const ridField = row.fields.find(f => f.label === 'function id');
+                if (ridField && ridField.value === fc.id) {
+                  inFunc = true;
+                } else if (ridField && ridField.value !== fc.id) {
+                  if (inFunc) break;
+                }
+                if (inFunc) {
+                  const pre = document.createElement('pre');
+                  pre.className = 'sse-delta-chunk-json';
+                  const originalChunk = parsed.chunks[row.chunkIndex];
+                  pre.textContent = originalChunk ? JSON.stringify(originalChunk) : '';
+                  chunkList.appendChild(pre);
+                }
+              }
+              details.appendChild(chunkList);
+              funcDiv.appendChild(details);
+            }
+
+            groupDiv.appendChild(funcDiv);
+          }
+        }
+
+        deltaSection.appendChild(groupDiv);
+      });
+
+      formattedView.appendChild(deltaSection);
+    }
+
+    // Special lines: finish_reason and [DONE]
+    if (parsed.finishReason || parsed.hasDone) {
+      const metaLines = document.createElement('div');
+      metaLines.className = 'sse-meta-lines';
+      metaLines.style.marginTop = '8px';
+
+      if (parsed.finishReason) {
+        const fr = document.createElement('span');
+        fr.className = 'sse-meta-badge';
+        fr.textContent = `finish_reason: ${parsed.finishReason}`;
+        metaLines.appendChild(fr);
+      }
+
+      if (parsed.hasDone) {
+        const done = document.createElement('span');
+        done.className = 'sse-meta-badge sse-meta-done';
+        done.textContent = '[DONE]';
+        metaLines.appendChild(done);
+      }
+
+      formattedView.appendChild(metaLines);
+    }
+
+    sseSection.appendChild(formattedView);
+
+    // === Raw SSE view (hidden by default) ===
+    const rawView = document.createElement('div');
+    rawView.className = 'hidden';
+    rawView.appendChild(createJsonView(entry.copilotResponse));
+    sseSection.appendChild(rawView);
+
+    // Toggle handler
+    sseToggleBtn.addEventListener('click', () => {
+      const showingFormatted = !formattedView.classList.contains('hidden');
+      if (showingFormatted) {
+        formattedView.classList.add('hidden');
+        rawView.classList.remove('hidden');
+        sseToggleBtn.textContent = 'Formatted';
+      } else {
+        rawView.classList.add('hidden');
+        formattedView.classList.remove('hidden');
+        sseToggleBtn.textContent = 'Raw';
+      }
+    });
+
+    container.appendChild(sseSection);
   }
 
+  return container;
+}
+
+/**
+ * Render the Raw JSON tab — shows the full entry as pretty-printed JSON with copy button.
+ */
+export function renderRawTab(entry) {
+  const container = document.createElement('div');
+
+  // Strip internal _index property for display
+  const displayEntry = { ...entry };
+  delete displayEntry._index;
+
+  const jsonText = JSON.stringify(displayEntry, null, 2);
+
+  const jsonContainer = document.createElement('div');
+  jsonContainer.className = 'json-view-container';
+
+  const pre = document.createElement('div');
+  pre.className = 'json-view';
+  pre.textContent = jsonText;
+
+  jsonContainer.appendChild(pre);
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'copy-btn';
+  copyBtn.textContent = 'Copy';
+  copyBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(jsonText);
+      copyBtn.textContent = 'Copied!';
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy';
+        copyBtn.classList.remove('copied');
+      }, 1500);
+    } catch {
+      copyBtn.textContent = 'Failed';
+      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+    }
+  });
+  jsonContainer.appendChild(copyBtn);
+
+  container.appendChild(jsonContainer);
   return container;
 }

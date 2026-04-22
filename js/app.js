@@ -10,6 +10,7 @@ import {
   renderToolsTab,
   renderRequestTab,
   renderResponseTab,
+  renderRawTab,
   renderMarkdownContent,
   modelLabel,
 } from './renderer.js';
@@ -24,6 +25,8 @@ let state = {
   fileSize: 0,
   truncated: false,
   searchMatchTab: {},
+  searchMatches: [],
+  searchMatchIndex: -1,
 };
 
 // ===== DOM References =====
@@ -51,6 +54,10 @@ const tabs = $('tabs');
 const themeToggle = $('themeToggle');
 const systemCount = $('systemCount');
 const toolsCount = $('toolsCount');
+const searchNav = $('searchNav');
+const searchPrev = $('searchPrev');
+const searchNext = $('searchNext');
+const searchMatchCountEl = $('searchMatchCount');
 
 // ===== Theme =====
 function initTheme() {
@@ -146,6 +153,9 @@ function closeFile() {
     fileName: '',
     fileSize: 0,
     truncated: false,
+    searchMatchTab: {},
+    searchMatches: [],
+    searchMatchIndex: -1,
   };
 
   fileInfo.classList.add('hidden');
@@ -157,6 +167,7 @@ function closeFile() {
   tabContent.innerHTML = '';
   searchInput.value = '';
   modelFilter.innerHTML = '<option value="">All models</option>';
+  updateSearchNav();
 }
 
 // ===== Filtering =====
@@ -262,12 +273,20 @@ function selectEntry(index) {
   systemCount.textContent = `(${entry.anthropicRequest?.system?.length || 0})`;
   toolsCount.textContent = `(${entry.anthropicRequest?.tools?.length || 0})`;
 
-  // Auto-switch to the tab where search matched
+  // Collect search matches and navigate to first one
   const searchVal = searchInput.value.trim();
   if (searchVal && state.searchMatchTab && state.searchMatchTab[index]) {
+    state.searchMatches = collectAllMatches(entry, searchVal);
+    state.searchMatchIndex = -1;
     setActiveTab(state.searchMatchTab[index]);
+    navigateToMatch(0);
   } else {
-    renderActiveTab();
+    state.searchMatches = [];
+    state.searchMatchIndex = -1;
+    setActiveTab('messages');
+    updateSearchNav();
+    // Scroll to bottom of tab content
+    tabContent.scrollTop = tabContent.scrollHeight;
   }
 
   // Update active entry in sidebar
@@ -299,6 +318,9 @@ function renderActiveTab() {
       break;
     case 'response':
       tabContent.appendChild(renderResponseTab(entry));
+      break;
+    case 'raw':
+      tabContent.appendChild(renderRawTab(entry));
       break;
   }
 }
@@ -394,6 +416,193 @@ function showContentViewer(title, text) {
   document.body.appendChild(overlay);
 }
 
+// ===== Search Match Navigation =====
+
+/**
+ * Collect all search matches in an entry across tabs (Messages → System → Tools).
+ * Each match: { tab, occurrenceInTab } — we track which tab and the Nth occurrence within that tab.
+ */
+function collectAllMatches(entry, searchTerm) {
+  const matches = [];
+  const lowerTerm = searchTerm.toLowerCase();
+
+  // Helper: count all occurrences in a string
+  function countOccurrences(text) {
+    const lower = text.toLowerCase();
+    let count = 0;
+    let pos = 0;
+    while ((pos = lower.indexOf(lowerTerm, pos)) !== -1) {
+      count++;
+      pos += lowerTerm.length;
+    }
+    return count;
+  }
+
+  // Messages tab
+  const messages = entry.anthropicRequest?.messages || [];
+  let msgTotal = 0;
+  for (const msg of messages) {
+    const blocks = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) }];
+    for (const block of blocks) {
+      const text = block.text || (block.type === 'text' ? '' : JSON.stringify(block));
+      msgTotal += countOccurrences(text);
+    }
+  }
+  for (let i = 0; i < msgTotal; i++) {
+    matches.push({ tab: 'messages', occurrenceInTab: i });
+  }
+
+  // System tab
+  const system = entry.anthropicRequest?.system || [];
+  let sysTotal = 0;
+  for (const s of system) {
+    const text = s.text || s.content || JSON.stringify(s);
+    sysTotal += countOccurrences(text);
+  }
+  for (let i = 0; i < sysTotal; i++) {
+    matches.push({ tab: 'system', occurrenceInTab: i });
+  }
+
+  // Tools tab
+  const tools = entry.anthropicRequest?.tools || [];
+  let toolTotal = 0;
+  for (const t of tools) {
+    toolTotal += countOccurrences(t.name || '');
+    toolTotal += countOccurrences(t.description || '');
+  }
+  for (let i = 0; i < toolTotal; i++) {
+    matches.push({ tab: 'tools', occurrenceInTab: i });
+  }
+
+  // Response tab (search copilotResponse raw text)
+  const response = entry.copilotResponse || '';
+  let respTotal = countOccurrences(response);
+  for (let i = 0; i < respTotal; i++) {
+    matches.push({ tab: 'response', occurrenceInTab: i });
+  }
+
+  return matches;
+}
+
+/**
+ * Navigate to a specific match by index. Switches tab if needed, highlights, and scrolls.
+ */
+function navigateToMatch(index) {
+  if (index < 0 || index >= state.searchMatches.length) return;
+
+  const match = state.searchMatches[index];
+  state.searchMatchIndex = index;
+
+  // Switch tab if needed (setActiveTab re-renders content)
+  if (state.activeTab !== match.tab) {
+    setActiveTab(match.tab);
+  }
+
+  // Highlight the Nth occurrence within the current tab's rendered content
+  highlightNthMatch(tabContent, searchInput.value.trim(), match.occurrenceInTab);
+  updateSearchNav();
+}
+
+/**
+ * Walk visible text nodes in container, highlight ALL occurrences of searchTerm
+ * with lighter yellow, and the Nth occurrence (current) with bright yellow. Scroll to current.
+ */
+function highlightNthMatch(container, searchTerm, n) {
+  if (!searchTerm) return;
+
+  // Clean up previous highlights
+  container.querySelectorAll('mark.search-highlight, mark.search-highlight-all').forEach(mark => {
+    const parent = mark.parentNode;
+    parent.replaceChild(document.createTextNode(mark.textContent), mark);
+    parent.normalize();
+  });
+
+  const lowerTerm = searchTerm.toLowerCase();
+
+  // First pass: collect all match positions (node + offset) by walking text nodes
+  const allMatches = [];
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      let el = node.parentElement;
+      while (el && el !== container) {
+        if (el.classList.contains('hidden')) return NodeFilter.FILTER_REJECT;
+        el = el.parentElement;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode;
+    const text = textNode.textContent.toLowerCase();
+    let pos = 0;
+    while ((pos = text.indexOf(lowerTerm, pos)) !== -1) {
+      allMatches.push({ node: textNode, offset: pos });
+      pos += lowerTerm.length;
+    }
+  }
+
+  if (allMatches.length === 0) return;
+
+  // Wrap matches in reverse order so earlier offsets stay valid
+  let currentMark = null;
+  for (let i = allMatches.length - 1; i >= 0; i--) {
+    const { node, offset } = allMatches[i];
+    const isCurrent = i === n;
+
+    // Open any closed <details> ancestors for the current match
+    if (isCurrent) {
+      let el = node.parentElement;
+      while (el && el !== container) {
+        if (el.tagName === 'DETAILS' && !el.open) {
+          el.open = true;
+        }
+        el = el.parentElement;
+      }
+    }
+
+    const range = document.createRange();
+    range.setStart(node, offset);
+    range.setEnd(node, offset + searchTerm.length);
+
+    const mark = document.createElement('mark');
+    mark.className = isCurrent ? 'search-highlight' : 'search-highlight-all';
+    range.surroundContents(mark);
+
+    if (isCurrent) {
+      currentMark = mark;
+    }
+  }
+
+  // Scroll to the current match
+  if (currentMark) {
+    requestAnimationFrame(() => {
+      currentMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+}
+
+/**
+ * Update Prev/Next button states and match counter.
+ */
+function updateSearchNav() {
+  const hasSearch = searchInput.value.trim().length > 0;
+  const total = state.searchMatches.length;
+  const idx = state.searchMatchIndex;
+
+  if (hasSearch && total > 0) {
+    searchNav.classList.remove('hidden');
+    searchMatchCountEl.textContent = `${idx + 1} / ${total}`;
+    searchPrev.disabled = idx <= 0;
+    searchNext.disabled = idx >= total - 1;
+  } else {
+    searchNav.classList.toggle('hidden', !hasSearch);
+    searchMatchCountEl.textContent = hasSearch ? '0 / 0' : '';
+    searchPrev.disabled = true;
+    searchNext.disabled = true;
+  }
+}
+
 // ===== Drag & Drop =====
 function initDragDrop() {
   // Prevent default for drag events on the document (prevents browser file open)
@@ -455,7 +664,25 @@ function initEventListeners() {
   let searchTimeout;
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(applyFilters, 300);
+    searchTimeout = setTimeout(() => {
+      applyFilters();
+      // Reset match nav when search changes
+      state.searchMatches = [];
+      state.searchMatchIndex = -1;
+      updateSearchNav();
+    }, 300);
+  });
+
+  // Search navigation buttons
+  searchPrev.addEventListener('click', () => {
+    if (state.searchMatchIndex > 0) {
+      navigateToMatch(state.searchMatchIndex - 1);
+    }
+  });
+  searchNext.addEventListener('click', () => {
+    if (state.searchMatchIndex < state.searchMatches.length - 1) {
+      navigateToMatch(state.searchMatchIndex + 1);
+    }
   });
 
   // Keyboard navigation (works with filtered list)
