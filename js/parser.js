@@ -8,38 +8,39 @@
 const toolsCache = new Map();
 
 /**
- * Compute a short hash string for a tools array.
- * Uses a simple but effective hash algorithm to create a compact identifier.
+ * Compute a SHA-256 hash for a tools array.
+ * Uses the Web Crypto API to create a secure hash identifier.
  * @param {Array} tools
- * @returns {string}
+ * @returns {Promise<string>}
  */
-function hashTools(tools) {
+async function hashTools(tools) {
   if (!tools || tools.length === 0) return '';
 
   // Convert tools to JSON string for hashing
   const str = JSON.stringify(tools);
 
-  // Simple hash algorithm (DJB2-style)
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash) + str.charCodeAt(i); // hash * 33 + c
-    hash = hash & hash; // Convert to 32-bit integer
-  }
+  // Use Web Crypto API for SHA-256 hashing
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
 
-  // Return as base36 string for compactness
-  return Math.abs(hash).toString(36);
+  // Convert hash to hex string
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  return hashHex;
 }
 
 /**
  * Cache tools array and return a cache ID.
  * If the same tools array is already cached, returns existing ID.
  * @param {Array} tools
- * @returns {string|null} - Cache ID or null if no tools
+ * @returns {Promise<string|null>} - Cache ID or null if no tools
  */
-function cacheTools(tools) {
+async function cacheTools(tools) {
   if (!tools || tools.length === 0) return null;
 
-  const hash = hashTools(tools);
+  const hash = await hashTools(tools);
   if (!toolsCache.has(hash)) {
     toolsCache.set(hash, tools);
   }
@@ -67,9 +68,9 @@ export function clearToolsCache() {
  * Parse a log file text into an array of log entries.
  * Expects JSONL format: one valid JSON object per line, no wrapping array.
  * @param {string} text - Raw file content
- * @returns {{ entries: object[], truncated: boolean }}
+ * @returns {Promise<{ entries: object[], truncated: boolean }>}
  */
-export function parseLogFile(text) {
+export async function parseLogFile(text) {
   const trimmed = text.trim();
   if (!trimmed) {
     throw new Error('Log file is empty.');
@@ -92,7 +93,7 @@ export function parseLogFile(text) {
 
       // Cache tools and replace with reference
       if (entry.anthropicRequest?.tools) {
-        const cacheId = cacheTools(entry.anthropicRequest.tools);
+        const cacheId = await cacheTools(entry.anthropicRequest.tools);
         if (cacheId) {
           entry.anthropicRequest._toolsCacheId = cacheId;
           delete entry.anthropicRequest.tools;
@@ -185,7 +186,7 @@ export async function parseLogFileStreaming(file, onProgress) {
 
           // Cache tools and replace with reference
           if (entry.anthropicRequest?.tools) {
-            const cacheId = cacheTools(entry.anthropicRequest.tools);
+            const cacheId = await cacheTools(entry.anthropicRequest.tools);
             if (cacheId) {
               entry.anthropicRequest._toolsCacheId = cacheId;
               delete entry.anthropicRequest.tools;
@@ -218,7 +219,7 @@ export async function parseLogFileStreaming(file, onProgress) {
 
         // Cache tools and replace with reference
         if (entry.anthropicRequest?.tools) {
-          const cacheId = cacheTools(entry.anthropicRequest.tools);
+          const cacheId = await cacheTools(entry.anthropicRequest.tools);
           if (cacheId) {
             entry.anthropicRequest._toolsCacheId = cacheId;
             delete entry.anthropicRequest.tools;

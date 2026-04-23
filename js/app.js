@@ -148,9 +148,9 @@ async function handleFileStreaming(file) {
 function handleFileLegacy(file) {
   const reader = new FileReader();
 
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
-      const result = parseLogFile(e.target.result);
+      const result = await parseLogFile(e.target.result);
       loadEntries(result.entries, file.name, file.size, result.truncated);
     } catch (err) {
       alert(`Error parsing file: ${err.message}`);
