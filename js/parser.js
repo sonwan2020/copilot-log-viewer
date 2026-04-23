@@ -8,14 +8,26 @@
 const toolsCache = new Map();
 
 /**
- * Compute a simple hash for a tools array.
- * Uses JSON.stringify for simplicity - tools are typically small objects.
+ * Compute a short hash string for a tools array.
+ * Uses a simple but effective hash algorithm to create a compact identifier.
  * @param {Array} tools
  * @returns {string}
  */
 function hashTools(tools) {
   if (!tools || tools.length === 0) return '';
-  return JSON.stringify(tools);
+
+  // Convert tools to JSON string for hashing
+  const str = JSON.stringify(tools);
+
+  // Simple hash algorithm (DJB2-style)
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i); // hash * 33 + c
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+
+  // Return as base36 string for compactness
+  return Math.abs(hash).toString(36);
 }
 
 /**
