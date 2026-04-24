@@ -95,7 +95,7 @@ async function hashSystemPrompt(system) {
 /**
  * Cache a system prompt array and return a cache ID.
  * If the same system prompt is already cached, returns existing ID.
- * Shared between Anthropic and OpenAI requests to maximise deduplication.
+ * Shared between Anthropic and OpenAI requests to maximize deduplication.
  * @param {Array} system
  * @returns {Promise<string|null>} - Cache ID or null if no system prompt
  */

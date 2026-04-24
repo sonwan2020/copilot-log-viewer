@@ -1113,7 +1113,8 @@ export function renderRequestTab(entry, callbacks = {}) {
 
     // Restore system prompt from cache if needed, then remove cache ID from display
     if (summary._systemPromptCacheId) {
-      summary.system = getSystemPromptFromCache(summary._systemPromptCacheId);
+      const cached = getSystemPromptFromCache(summary._systemPromptCacheId);
+      if (cached) summary.system = cached;
       delete summary._systemPromptCacheId;
     }
 
