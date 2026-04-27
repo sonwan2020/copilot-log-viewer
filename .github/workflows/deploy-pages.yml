@@ -29,4 +29,4 @@ jobs:
           # keep_files must stay true so PR preview subdirectories
           # (pr-previews/pr-*/) are not deleted on each main-branch deploy.
           keep_files: true
-          exclude_assets: 'pr-previews,.github,.git,.gitignore,.gitattributes,.squad,.copilot,package.json,prompt.txt,CLAUDE.md'
+          exclude_assets: '.github,.git,.gitignore,.gitattributes,.squad,.copilot,package.json,prompt.txt,CLAUDE.md'
