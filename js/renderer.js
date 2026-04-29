@@ -748,6 +748,13 @@ export function renderMessagesTab(entry) {
     previewSpan.textContent = previewText + (previewText.length >= 80 ? '...' : '');
     header.appendChild(previewSpan);
 
+    // Raw JSON toggle button
+    const rawJsonBtn = document.createElement('button');
+    rawJsonBtn.className = 'msg-raw-btn';
+    rawJsonBtn.textContent = '{ }';
+    rawJsonBtn.title = 'Toggle raw JSON view';
+    header.appendChild(rawJsonBtn);
+
     const toggleIcon = document.createElement('span');
     toggleIcon.className = 'message-toggle-icon';
     toggleIcon.textContent = '\u25B6';
@@ -757,22 +764,72 @@ export function renderMessagesTab(entry) {
     body.className = 'message-body hidden';
     let bodyRendered = false;
 
+    const rawJsonView = document.createElement('div');
+    rawJsonView.className = 'message-raw-json hidden';
+    let rawJsonRendered = false;
+
     header.addEventListener('click', () => {
-      const isHidden = body.classList.contains('hidden');
+      const isExpanded = !body.classList.contains('hidden') || !rawJsonView.classList.contains('hidden');
 
-      // Lazy render: build message body on first expand
-      if (isHidden && !bodyRendered) {
-        bodyRendered = true;
-        renderMessageBody(body, msg, blocks, toolUseMap);
+      if (isExpanded) {
+        // Collapse everything
+        body.classList.add('hidden');
+        rawJsonView.classList.add('hidden');
+        rawJsonBtn.classList.remove('active');
+        toggleIcon.textContent = '\u25B6';
+        previewSpan.classList.remove('hidden');
+      } else {
+        // Expand with formatted body
+        if (!bodyRendered) {
+          bodyRendered = true;
+          renderMessageBody(body, msg, blocks, toolUseMap);
+        }
+        body.classList.remove('hidden');
+        toggleIcon.textContent = '\u25BC';
+        previewSpan.classList.add('hidden');
       }
+    });
 
-      body.classList.toggle('hidden');
-      toggleIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
-      previewSpan.classList.toggle('hidden', isHidden);
+    rawJsonBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rawIsVisible = !rawJsonView.classList.contains('hidden');
+
+      if (rawIsVisible) {
+        // Switch back to formatted body
+        rawJsonView.classList.add('hidden');
+        rawJsonBtn.classList.remove('active');
+        if (!bodyRendered) {
+          bodyRendered = true;
+          renderMessageBody(body, msg, blocks, toolUseMap);
+        }
+        body.classList.remove('hidden');
+      } else {
+        // Show raw JSON (lazy-render on first toggle)
+        if (!rawJsonRendered) {
+          rawJsonRendered = true;
+          const jsonText = JSON.stringify(msg, null, 2);
+          const pre = document.createElement('pre');
+          pre.className = 'md-code-block';
+          const code = document.createElement('code');
+          code.className = 'md-code lang-json';
+          code.textContent = jsonText;
+          applyHighlight(code, 'json');
+          pre.appendChild(code);
+          rawJsonView.appendChild(pre);
+          rawJsonView.appendChild(createCopyButton(jsonText));
+        }
+        body.classList.add('hidden');
+        rawJsonView.classList.remove('hidden');
+        rawJsonBtn.classList.add('active');
+        // Ensure message looks expanded
+        toggleIcon.textContent = '\u25BC';
+        previewSpan.classList.add('hidden');
+      }
     });
 
     msgDiv.appendChild(header);
     msgDiv.appendChild(body);
+    msgDiv.appendChild(rawJsonView);
     container.appendChild(msgDiv);
   }
 

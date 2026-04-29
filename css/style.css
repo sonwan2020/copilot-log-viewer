@@ -538,6 +538,34 @@ html, body {
   flex-shrink: 0;
 }
 
+.msg-raw-btn {
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.msg-raw-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.msg-raw-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.message-raw-json {
+  padding: 12px;
+}
+
 .message.user .message-header {
   background: var(--user-bg);
   color: #1e40af;
